@@ -16,9 +16,9 @@ from datetime import date
 from database.queries import (
     obtener_usuarios, obtener_transacciones,
     obtener_tarjetas, obtener_prestamos,
-    calcular_balance_pareja,
+    calcular_balance_pareja, obtener_tarjetas_todas,
 )
-from utils.calculos import estado_tarjeta, calcular_periodo_corte, MESES_ES
+from utils.calculos import estado_tarjeta, calcular_periodo_corte, MESES_ES, inyectar_proyecciones_msi
 
 
 def _opciones_meses(n: int = 12, meses_adelante: int = 1) -> list[dict]:
@@ -119,6 +119,20 @@ def render():
     # ── Obtener transacciones ───────────────────────────────────────────
     uid = None if es_pareja else usuario_activo["id"]
     txs = obtener_transacciones(usuario_id=uid, desde=desde, hasta=hasta)
+
+    todas_tarjetas = obtener_tarjetas_todas(uid)
+    tarjetas_map   = {t["id"]: t for t in todas_tarjetas}
+    desde_amplio   = date(hoy.year - 3, 1, 1).strftime("%Y-%m-%d")
+    txs_msi_base   = obtener_transacciones(
+        usuario_id=uid, desde=desde_amplio, hasta=hasta, tipo="gasto"
+    )
+    txs_msi_base = [t for t in txs_msi_base if t.get("meses_sin_intereses", 0) > 0]
+    if txs_msi_base:
+        txs = inyectar_proyecciones_msi(
+            txs, dia_corte=None, desde=desde, hasta=hasta,
+            txs_msi_origen=txs_msi_base,
+            tarjetas_map=tarjetas_map,
+        )
 
     gastos_tx   = [t for t in txs if t["tipo"] == "gasto"]
     ingresos_tx = [t for t in txs if t["tipo"] == "ingreso"]
