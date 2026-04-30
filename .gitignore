@@ -1,3 +1,7 @@
+# Scripts de uso único
+migrar_datos.py
+check_sqlite.py
+
 # Base de datos local — contiene datos financieros privados
 data/
 *.db
