@@ -6,7 +6,6 @@ Se ejecuta una sola vez al iniciar la app.
 Si las tablas ya existen, no borra nada — solo agrega lo que falte.
 """
 
-import os
 import psycopg2
 import psycopg2.extras
 import streamlit as st
@@ -15,20 +14,15 @@ import streamlit as st
 def get_connection() -> psycopg2.extensions.connection:
     """
     Retorna una conexión a PostgreSQL usando parámetros individuales de st.secrets.
-    Usar parámetros separados evita problemas de codificación en contraseñas con
-    caracteres especiales (&, !, *, @, etc.).
     """
-    try:
-        db = st.secrets["database"]
-        return psycopg2.connect(
-            host=db["host"],
-            port=int(db["port"]),
-            dbname=db["dbname"],
-            user=db["user"],
-            password=db["password"],
-        )
-    except Exception:
-        return psycopg2.connect(os.environ.get("DATABASE_URL", ""))
+    db = st.secrets["database"]
+    return psycopg2.connect(
+        host=db["host"],
+        port=int(db["port"]),
+        dbname=db["dbname"],
+        user=db["user"],
+        password=db["password"],
+    )
 
 
 def crear_tablas():
