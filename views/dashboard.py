@@ -144,11 +144,11 @@ def render():
 
     # ── Métricas principales ────────────────────────────────────────────
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("💰 Ingresos", f"${total_ingresos:,.0f}")
-    m2.metric("💸 Gastos",   f"${total_gastos:,.0f}")
+    m1.metric("💰 Ingresos", f"${total_ingresos:,.2f}")
+    m2.metric("💸 Gastos",   f"${total_gastos:,.2f}")
     m3.metric(
         "🏦 Ahorro",
-        f"${ahorro:,.0f}",
+        f"${ahorro:,.2f}",
         delta=f"{tasa_ahorro:.1f}% del ingreso",
         delta_color="normal" if ahorro >= 0 else "inverse",
     )
@@ -192,7 +192,7 @@ def render():
                 paper_bgcolor="rgba(0,0,0,0)",
                 showlegend=False,
                 annotations=[dict(
-                    text=f"${total_gastos:,.0f}",
+                    text=f"${total_gastos:,.2f}",
                     x=0.5, y=0.5, font_size=16, showarrow=False,
                     font=dict(family="sans-serif"),
                 )],
@@ -209,7 +209,7 @@ def render():
                     f"<div style='display:flex;justify-content:space-between;"
                     f"align-items:center;margin-bottom:6px'>"
                     f"<span style='font-size:13px'>{nombre}</span>"
-                    f"<span style='font-size:13px;font-weight:500'>${monto:,.0f}</span>"
+                    f"<span style='font-size:13px;font-weight:500'>${monto:,.2f}</span>"
                     f"</div>"
                     f"<div style='background:#eee;border-radius:4px;height:4px;margin-bottom:10px'>"
                     f"<div style='background:{color};width:{pct:.1f}%;height:4px;"
@@ -310,8 +310,8 @@ def render():
                     f"<p style='text-align:center;font-size:12px;margin:-8px 0 0'>"
                     f"<span style='color:{color_dias}'>"
                     f"Pago en {dias}d · {est['fecha_pago'].strftime('%d/%m')}</span><br>"
-                    f"<span style='color:gray'>${est['total_periodo']:,.0f} "
-                    f"de ${tarjeta['limite']:,.0f}</span></p>",
+                    f"<span style='color:gray'>${est['total_periodo']:,.2f} "
+                    f"de ${tarjeta['limite']:,.2f}</span></p>",
                     unsafe_allow_html=True,
                 )
                 if me_deben_tarjeta > 0:
@@ -319,10 +319,10 @@ def render():
                         f"<p style='text-align:center;font-size:11px;margin:4px 0 0'>"
                         f"<span style='color:#888'>Me deben </span>"
                         f"<span style='color:#EF9F27;font-weight:600'>"
-                        f"${me_deben_tarjeta:,.0f}</span>"
+                        f"${me_deben_tarjeta:,.2f}</span>"
                         f"<span style='color:#888'> · Real: </span>"
                         f"<span style='color:#639922;font-weight:600'>"
-                        f"${real_a_pagar:,.0f}</span></p>",
+                        f"${real_a_pagar:,.2f}</span></p>",
                         unsafe_allow_html=True,
                     )
 
