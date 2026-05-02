@@ -109,9 +109,16 @@ def _render_tarjeta_prestamo(p: dict, usuario_activo: dict, puede_abonar: bool):
     # Badge de gasto vinculado
     gasto_html = ""
     if p.get("tx_descripcion"):
+        if p.get("tx_tarjeta_nombre"):
+            origen = f"💳 {p['tx_tarjeta_nombre']} ({p['tx_tarjeta_banco']})"
+        elif p.get("tx_cuenta_nombre"):
+            origen = f"🏦 {p['tx_cuenta_nombre']}"
+        else:
+            origen = ""
+        origen_html = f" · {origen}" if origen else ""
         gasto_html = (
             f"<br><span style='font-size:11px;color:#888'>🧾 Gasto: "
-            f"{p['tx_descripcion']} · ${p['tx_monto']:,.2f}</span>"
+            f"{p['tx_descripcion']} · ${p['tx_monto']:,.2f}{origen_html}</span>"
         )
 
     sin_pagos = p["monto_pendiente"] == p["monto_original"]

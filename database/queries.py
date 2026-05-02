@@ -400,13 +400,18 @@ def obtener_prestamos(
             p.*,
             ua.nombre  AS acreedor_nombre,
             ud.nombre  AS deudor_nombre,
-            t.descripcion AS transaccion_descripcion,
-            t.monto       AS transaccion_monto,
-            t.fecha       AS transaccion_fecha
+            t.descripcion AS tx_descripcion,
+            t.monto       AS tx_monto,
+            t.fecha       AS tx_fecha,
+            c.nombre      AS tx_cuenta_nombre,
+            tc.nombre     AS tx_tarjeta_nombre,
+            tc.banco      AS tx_tarjeta_banco
         FROM prestamo p
-        LEFT JOIN usuario ua   ON p.acreedor_id    = ua.id
-        LEFT JOIN usuario ud   ON p.deudor_id      = ud.id
-        LEFT JOIN transaccion t ON p.transaccion_id = t.id
+        LEFT JOIN usuario ua          ON p.acreedor_id    = ua.id
+        LEFT JOIN usuario ud          ON p.deudor_id      = ud.id
+        LEFT JOIN transaccion t       ON p.transaccion_id = t.id
+        LEFT JOIN cuenta c            ON t.cuenta_id      = c.id
+        LEFT JOIN tarjeta_credito tc  ON t.tarjeta_id     = tc.id
         WHERE 1=1
     """
     params = []
