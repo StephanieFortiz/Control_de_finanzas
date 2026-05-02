@@ -6,6 +6,7 @@ from datetime import date
 from database.queries import (
     obtener_usuarios, obtener_prestamos,
     crear_prestamo, registrar_pago_prestamo,
+    eliminar_prestamo,
     obtener_transacciones_para_prestamo,
 )
 from utils.calculos import MESES_ES
@@ -113,7 +114,9 @@ def _render_tarjeta_prestamo(p: dict, usuario_activo: dict, puede_abonar: bool):
             f"{p['tx_descripcion']} · ${p['tx_monto']:,.2f}</span>"
         )
 
-    col_a, col_b, col_c = st.columns([3, 2, 1])
+    sin_pagos = p["monto_pendiente"] == p["monto_original"]
+
+    col_a, col_b, col_c, col_d = st.columns([3, 2, 1, 1])
     with col_a:
         st.markdown(
             f"**{p['notas'] or direccion}** {_badge_estado(p['estado'])}"
@@ -139,6 +142,10 @@ def _render_tarjeta_prestamo(p: dict, usuario_activo: dict, puede_abonar: bool):
         if puede_abonar and p["estado"] == "pendiente":
             if st.button("💸 Abonar", key=f"abonar_{p['id']}"):
                 st.session_state[f"abonando_{p['id']}"] = True
+    with col_d:
+        if sin_pagos:
+            if st.button("🗑", key=f"del_{p['id']}", help="Eliminar préstamo"):
+                st.session_state[f"confirmando_eliminar_{p['id']}"] = True
 
     if st.session_state.get(f"abonando_{p['id']}"):
         with st.form(key=f"form_abono_{p['id']}"):
@@ -164,6 +171,23 @@ def _render_tarjeta_prestamo(p: dict, usuario_activo: dict, puede_abonar: bool):
                 st.rerun()
             if cancelar:
                 st.session_state.pop(f"abonando_{p['id']}", None)
+                st.rerun()
+
+    if st.session_state.get(f"confirmando_eliminar_{p['id']}"):
+        st.warning(
+            f"¿Eliminar este préstamo de **${p['monto_original']:,.2f}**? "
+            "Esta acción no se puede deshacer."
+        )
+        c_si, c_no = st.columns(2)
+        with c_si:
+            if st.button("Sí, eliminar", key=f"confirmar_del_{p['id']}", type="primary"):
+                eliminar_prestamo(p["id"])
+                st.session_state.pop(f"confirmando_eliminar_{p['id']}", None)
+                st.success("Préstamo eliminado.")
+                st.rerun()
+        with c_no:
+            if st.button("Cancelar", key=f"cancelar_del_{p['id']}"):
+                st.session_state.pop(f"confirmando_eliminar_{p['id']}", None)
                 st.rerun()
 
     st.divider()

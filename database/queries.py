@@ -456,6 +456,15 @@ def registrar_pago_prestamo(prestamo_id: int, monto: float,
     return nuevo_id
 
 
+def eliminar_prestamo(prestamo_id: int):
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM pago_prestamo WHERE prestamo_id = %s", (prestamo_id,))
+        cur.execute("DELETE FROM prestamo WHERE id = %s", (prestamo_id,))
+    conn.commit()
+    conn.close()
+
+
 def obtener_transacciones_para_prestamo(
     usuario_id: Optional[int] = None,
     desde: Optional[str] = None,
