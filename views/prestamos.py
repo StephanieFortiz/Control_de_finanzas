@@ -190,6 +190,10 @@ def _render_tarjeta_prestamo(p: dict, usuario_activo: dict, puede_abonar: bool):
             if st.button("Sí, eliminar", key=f"confirmar_del_{p['id']}", type="primary"):
                 eliminar_prestamo(p["id"])
                 st.session_state.pop(f"confirmando_eliminar_{p['id']}", None)
+                for k in ("dg_gasto_sel", "dg_tipo_persona", "dg_nombre_ext",
+                          "dg_modo_monto", "dg_pct", "dg_monto_fijo", "dg_tipo_pago"):
+                    st.session_state.pop(k, None)
+                st.cache_data.clear()
                 st.success("Préstamo eliminado.")
                 st.rerun()
         with c_no:
