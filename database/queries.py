@@ -255,7 +255,7 @@ def obtener_transacciones(
         LEFT JOIN cuenta c          ON t.cuenta_id    = c.id
         LEFT JOIN tarjeta_credito tc ON t.tarjeta_id  = tc.id
         LEFT JOIN categoria cat     ON t.categoria_id = cat.id
-        LEFT JOIN prestamo p        ON p.transaccion_id = t.id
+        LEFT JOIN prestamo p        ON p.transaccion_id = t.id AND p.estado = 'pendiente'
         LEFT JOIN usuario ua        ON p.acreedor_id  = ua.id
         LEFT JOIN usuario ud        ON p.deudor_id    = ud.id
         WHERE 1=1
