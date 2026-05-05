@@ -495,7 +495,9 @@ def obtener_transacciones_para_prestamo(
         LEFT JOIN tarjeta_credito tc ON t.tarjeta_id = tc.id
         WHERE t.tipo = 'gasto'
           AND NOT EXISTS (
-              SELECT 1 FROM prestamo p WHERE p.transaccion_id = t.id
+              SELECT 1 FROM prestamo p
+               WHERE p.transaccion_id = t.id
+                 AND p.estado = 'pendiente'
           )
     """
     params = []
