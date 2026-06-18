@@ -255,8 +255,8 @@ def render():
             if t.get("meses_sin_intereses", 0) > 0 and not t.get("es_proyeccion"):
                 st.markdown(
                     f"<span style='color:{color};font-weight:500'>"
-                    f"r{signo}{_fmt(t['monto_por_mes'])}/mes</span>  \n"
-                    f"<span style='font-size:11px;color:gray'>Total: {_fmt(t['monto'])}</span>",
+                    f"{signo}\${t['monto_por_mes']:,.2f}/mes</span>  \n"
+                    f"<span style='font-size:11px;color:gray'>Total: \${t['monto']:,.2f}</span>",
                     unsafe_allow_html=True,
                 )
             else:
