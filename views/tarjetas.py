@@ -181,11 +181,12 @@ def _fila_transaccion(t: dict):
         )
     with cb:
         if t.get("meses_sin_intereses", 0) > 0:
+            monto_total = t.get("monto_original", t["monto"])
             st.markdown(
                 f"<span style='color:#E24B4A;font-weight:500'>"
                 f"-\${t['monto_por_mes']:,.2f}/mes</span>  \n"
                 f"<span style='font-size:11px;color:gray'>"
-                f"Total: ${t['monto']:,.2f}</span>",
+                f"Total: ${monto_total:,.2f}</span>",
                 unsafe_allow_html=True,
             )
         else:
