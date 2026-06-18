@@ -52,7 +52,7 @@ with st.sidebar:
 
     opciones = {
         "📊 Dashboard":        "dashboard",
-        "➕ Nueva transacción": "transacciones",
+        "📋 Transacciones":     "transacciones",
         "💳 Tarjetas":          "tarjetas",
         "🤝 Préstamos":         "prestamos",
         "⚖️  Liquidar cuentas": "liquidaciones",

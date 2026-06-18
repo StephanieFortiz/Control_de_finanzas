@@ -121,7 +121,7 @@ def _limpiar_keys(prefijo: str):
 
 
 def render():
-    st.title("➕ Registrar transacción")
+    st.title("📋 Transacciones")
 
     usuarios = obtener_usuarios()
     if len(usuarios) < 2:
@@ -144,7 +144,7 @@ def render():
     st.markdown("#### Historial")
     hoy = date.today()
 
-    # Fila 1: usuario, mes, tipo
+    # Fila 1: usuario, mes, categoría
     col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1:
         vista_u = st.selectbox("Usuario",
@@ -160,7 +160,10 @@ def render():
         mes_sel    = st.selectbox("Mes", mes_labels, key="hist_mes")
         mes_fecha  = meses_hist[mes_labels.index(mes_sel)]
     with col_f3:
-        tipo_f = st.selectbox("Tipo", ["Todos", "gasto", "ingreso"], key="hist_tipo")
+        cats_hist = obtener_categorias()
+        opc_cats  = {"Todas las categorías": None}
+        opc_cats.update({f"{c['icono']} {c['nombre']}": c["id"] for c in cats_hist})
+        cat_f = opc_cats[st.selectbox("Categoría", list(opc_cats.keys()), key="hist_cat")]
 
     # Fila 2: cuenta y tarjeta — dependen del usuario seleccionado
     uid_f = None if vista_u == "Todos" else next(u["id"] for u in usuarios if u["nombre"] == vista_u)
@@ -180,23 +183,27 @@ def render():
         sel_tarjeta = st.selectbox("Tarjeta", list(opc_tarjetas.keys()), key="hist_tarjeta")
         tarjeta_f   = opc_tarjetas[sel_tarjeta]
 
-    # Si se selecciona una cuenta, limpiar filtro de tarjeta y viceversa
+    orden = st.selectbox(
+        "Ordenar por",
+        ["Fecha (más reciente)", "Fecha (más antigua)",
+         "Monto (mayor primero)", "Monto (menor primero)",
+         "Categoría A→Z", "Usuario A→Z"],
+        key="hist_orden",
+    )
+
     if cuenta_f and tarjeta_f:
         st.caption("ℹ️ Filtrando por cuenta — el filtro de tarjeta se ignora.")
         tarjeta_f = None
     ultimo = calendar.monthrange(mes_fecha.year, mes_fecha.month)[1]
     desde  = mes_fecha.strftime("%Y-%m-01")
     hasta  = f"{mes_fecha.year}-{mes_fecha.month:02d}-{ultimo:02d}"
-    tipo_q = None if tipo_f == "Todos" else tipo_f
 
     txs = obtener_transacciones(
-        usuario_id=uid_f, desde=desde, hasta=hasta, tipo=tipo_q,
+        usuario_id=uid_f, desde=desde, hasta=hasta,
         cuenta_id=cuenta_f, tarjeta_id=tarjeta_f,
     )
 
-    # Mensualidades 2, 3, ..., N de compras anteriores cuyo corte cae en este mes.
-    # El cargo original (mensualidad 1) ya aparece por su fecha de compra.
-    if tipo_q != "ingreso" and cuenta_f is None:
+    if cuenta_f is None:
         todas_tarjetas = obtener_tarjetas_todas(uid_f)
         tarjetas_map   = {t["id"]: t for t in todas_tarjetas}
         desde_amplio   = date(hoy.year - 3, 1, 1).strftime("%Y-%m-%d")
@@ -211,6 +218,25 @@ def render():
                 txs_msi_origen=txs_msi_base,
                 tarjetas_map=tarjetas_map,
             )
+
+    if cat_f is not None:
+        txs = [t for t in txs if t.get("categoria_id") == cat_f]
+
+    def _monto_ord(t):
+        return (t.get("monto_por_mes") or t["monto"]) if t.get("meses_sin_intereses", 0) > 0 else t["monto"]
+
+    if orden == "Fecha (más reciente)":
+        txs = sorted(txs, key=lambda t: (t["fecha"], t.get("id", 0)), reverse=True)
+    elif orden == "Fecha (más antigua)":
+        txs = sorted(txs, key=lambda t: (t["fecha"], t.get("id", 0)))
+    elif orden == "Monto (mayor primero)":
+        txs = sorted(txs, key=_monto_ord, reverse=True)
+    elif orden == "Monto (menor primero)":
+        txs = sorted(txs, key=_monto_ord)
+    elif orden == "Categoría A→Z":
+        txs = sorted(txs, key=lambda t: t.get("categoria_nombre") or "")
+    elif orden == "Usuario A→Z":
+        txs = sorted(txs, key=lambda t: t.get("usuario_nombre") or "")
 
     if not txs:
         st.caption("No hay transacciones con estos filtros.")
