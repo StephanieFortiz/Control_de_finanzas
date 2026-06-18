@@ -9,7 +9,7 @@ Vista del motor de tarjetas de crédito. Muestra:
 import streamlit as st
 from datetime import date
 from database.queries import obtener_usuarios, obtener_tarjetas, obtener_transacciones
-from utils.calculos import estado_tarjeta, agrupar_por_periodo, calcular_fecha_pago, MESES_ES
+from utils.calculos import estado_tarjeta, agrupar_por_periodo, calcular_fecha_pago
 
 
 def _color_alerta(alerta: str) -> str:
@@ -171,7 +171,7 @@ def _fila_transaccion(t: dict):
                 )
         notas_html = (
             f"<br><span style='font-size:11px;color:#888'>📝 {t['notas']}</span>"
-            if t.get("notas") and not es_proyeccion else ""
+            if t.get("notas") else ""
         )
         icono = "🔄" if es_proyeccion else t.get("categoria_icono", "📦")
         st.markdown(
