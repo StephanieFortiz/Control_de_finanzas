@@ -216,7 +216,10 @@ def render():
         st.caption("No hay transacciones con estos filtros.")
         return
 
-    g_sum = sum(t["monto"] for t in txs if t["tipo"] == "gasto")
+    g_sum = sum(
+        (t.get("monto_por_mes") or t["monto"]) if t.get("meses_sin_intereses", 0) > 0 else t["monto"]
+        for t in txs if t["tipo"] == "gasto"
+    )
     i_sum = sum(t["monto"] for t in txs if t["tipo"] == "ingreso")
     m1, m2, m3 = st.columns(3)
     m1.metric("Gastos", _fmt(g_sum))
@@ -249,8 +252,16 @@ def render():
         with col_b:
             color = "#E24B4A" if t["tipo"] == "gasto" else "#639922"
             signo = "-" if t["tipo"] == "gasto" else "+"
-            st.markdown(f"<span style='color:{color};font-weight:500'>"
-                        f"{signo}{_fmt(t['monto'])}</span>", unsafe_allow_html=True)
+            if t.get("meses_sin_intereses", 0) > 0 and not t.get("es_proyeccion"):
+                st.markdown(
+                    f"<span style='color:{color};font-weight:500'>"
+                    f"{signo}{_fmt(t['monto_por_mes'])}/mes</span>  \n"
+                    f"<span style='font-size:11px;color:gray'>Total: {_fmt(t['monto'])}</span>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f"<span style='color:{color};font-weight:500'>"
+                            f"{signo}{_fmt(t['monto'])}</span>", unsafe_allow_html=True)
         with col_c:
             st.caption(t["fecha"])
         with col_acc:
