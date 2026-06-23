@@ -214,9 +214,8 @@ def render():
         txs_msi_base = [t for t in txs_msi_base if t.get("meses_sin_intereses", 0) > 0]
         if txs_msi_base:
             txs = inyectar_proyecciones_msi(
-                txs, dia_corte=None, desde=desde, hasta=hasta,
+                txs, desde=desde, hasta=hasta,
                 txs_msi_origen=txs_msi_base,
-                tarjetas_map=tarjetas_map,
             )
 
     if cat_f is not None:

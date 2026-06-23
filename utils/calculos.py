@@ -99,13 +99,12 @@ def dias_para_corte(fecha_corte: date, hoy: date = None) -> int:
 # PROYECCIÓN DE MSI EN PERÍODOS FUTUROS
 # ======================================================================
 
-def _fecha_corte_n(periodo_inicial_corte: date, n: int, dia_corte: int) -> date:
-    """Calcula la fecha de corte del período N (0-based) a partir del período inicial."""
-    mes_n = periodo_inicial_corte.month + n
-    anio_n = periodo_inicial_corte.year + (mes_n - 1) // 12
-    mes_n = ((mes_n - 1) % 12) + 1
-    ultimo = calendar.monthrange(anio_n, mes_n)[1]
-    return date(anio_n, mes_n, min(dia_corte, ultimo))
+def _fecha_mas_n_meses(fecha: date, n: int) -> date:
+    """Suma n meses a una fecha; ajusta al último día si el día no existe en ese mes."""
+    m = fecha.month + n
+    a = fecha.year + (m - 1) // 12
+    m = ((m - 1) % 12) + 1
+    return date(a, m, min(fecha.day, calendar.monthrange(a, m)[1]))
 
 
 def proyectar_msi_en_periodo(
@@ -135,11 +134,10 @@ def proyectar_msi_en_periodo(
 
         fecha_original = date.fromisoformat(t["fecha"])
         monto_mensual = t.get("monto_por_mes", round(t["monto"] / meses, 2))
-        periodo_inicial = calcular_periodo_corte(fecha_original, dia_corte)
 
         for n in range(meses):
-            fc_n = _fecha_corte_n(periodo_inicial["fecha_corte"], n, dia_corte)
-            if fc_n == fecha_corte_objetivo:
+            fecha_n = _fecha_mas_n_meses(fecha_original, n)
+            if calcular_periodo_corte(fecha_n, dia_corte)["fecha_corte"] == fecha_corte_objetivo:
                 proyecciones.append({
                     **t,
                     "monto":                monto_mensual,
@@ -147,6 +145,7 @@ def proyectar_msi_en_periodo(
                     "monto_original":       t["monto"],
                     "es_proyeccion":        n > 0,
                     "mensualidad_num":      n + 1,
+                    "fecha":                fecha_n.isoformat(),
                     "fecha_cargo_original": t["fecha"],
                     "descripcion": (
                         t["descripcion"] if n == 0
@@ -297,21 +296,12 @@ def agrupar_por_periodo(transacciones: list[dict],
     for t in todos_msi:
         meses = t["meses_sin_intereses"]
         fecha_original = date.fromisoformat(t["fecha"])
-        periodo_inicial = calcular_periodo_corte(fecha_original, dia_corte)
         monto_mensual = t.get("monto_por_mes", round(t["monto"] / meses, 2))
 
         for n in range(1, meses):   # mensualidades 2 en adelante
-            fc_n = _fecha_corte_n(periodo_inicial["fecha_corte"], n, dia_corte)
+            fecha_n = _fecha_mas_n_meses(fecha_original, n)
+            periodo_n = calcular_periodo_corte(fecha_n, dia_corte)
 
-            # Calcular fecha_inicio del período proyectado
-            if fc_n.month > 1:
-                a_ant, m_ant = fc_n.year, fc_n.month - 1
-            else:
-                a_ant, m_ant = fc_n.year - 1, 12
-            u_ant = calendar.monthrange(a_ant, m_ant)[1]
-            fi_n = date(a_ant, m_ant, min(dia_corte, u_ant)) + timedelta(days=1)
-
-            label_n = _label_periodo(fc_n)
             proyeccion = {
                 **t,
                 "monto":                monto_mensual,
@@ -319,10 +309,12 @@ def agrupar_por_periodo(transacciones: list[dict],
                 "monto_original":       t["monto"],
                 "es_proyeccion":        True,
                 "mensualidad_num":      n + 1,
+                "fecha":                fecha_n.isoformat(),
                 "fecha_cargo_original": t["fecha"],
                 "descripcion":          f"{t['descripcion']} ({n+1}/{meses})",
             }
-            _agregar(proyeccion, fc_n, fi_n, label_n, es_proyeccion=True)
+            _agregar(proyeccion, periodo_n["fecha_corte"], periodo_n["fecha_inicio"],
+                     periodo_n["periodo_label"], es_proyeccion=True)
 
     return dict(
         sorted(grupos.items(), key=lambda x: x[1]["fecha_corte"], reverse=True)
@@ -331,24 +323,16 @@ def agrupar_por_periodo(transacciones: list[dict],
 
 def inyectar_proyecciones_msi(
     transacciones: list[dict],
-    dia_corte: int,
     desde: str,
     hasta: str,
     txs_msi_origen: list[dict] = None,
-    tarjetas_map: dict = None,
 ) -> list[dict]:
     """
     Toma una lista de transacciones del rango visible y agrega las
     mensualidades MSI proyectadas (mes 2 en adelante) que caen en ese rango.
 
-    txs_msi_origen: lista amplia con cargos MSI de meses anteriores.
-    tarjetas_map: dict {tarjeta_id: tarjeta_dict} para obtener dia_corte
-                  por tarjeta. Si se provee, dia_corte se ignora y se usa
-                  el de cada tarjeta. Esto evita duplicados al llamar la
-                  función una sola vez para múltiples tarjetas.
+    txs_msi_origen: lista amplia con cargos MSI de meses anteriores al rango.
     """
-    import calendar as _cal
-
     fecha_desde = date.fromisoformat(desde)
     fecha_hasta = date.fromisoformat(hasta)
 
@@ -361,28 +345,10 @@ def inyectar_proyecciones_msi(
         monto_mens = t.get("monto_por_mes", round(t["monto"] / meses, 2))
         fecha_orig = date.fromisoformat(t["fecha"])
 
-        # Resolver dia_corte: tarjetas_map tiene prioridad sobre el parámetro
-        if tarjetas_map and t.get("tarjeta_id"):
-            tarjeta_obj = tarjetas_map.get(t["tarjeta_id"])
-            dc = tarjeta_obj["dia_corte"] if tarjeta_obj else (dia_corte or 1)
-        else:
-            dc = dia_corte or 1
-
-        p_inicial = calcular_periodo_corte(fecha_orig, dc)
-
         for n in range(1, meses):           # mensualidades 2, 3, ..., N
-            fc_n = _fecha_corte_n(p_inicial["fecha_corte"], n, dc)
+            fecha_n = _fecha_mas_n_meses(fecha_orig, n)
 
-            # Calcular fi_n (inicio del período, es la fecha que se muestra)
-            if fc_n.month > 1:
-                a_ant, m_ant = fc_n.year, fc_n.month - 1
-            else:
-                a_ant, m_ant = fc_n.year - 1, 12
-            u_ant = _cal.monthrange(a_ant, m_ant)[1]
-            fi_n  = date(a_ant, m_ant, min(dc, u_ant)) + timedelta(days=1)
-
-            # Incluir solo si el inicio del período cae dentro del mes filtrado
-            if not (fecha_desde <= fi_n <= fecha_hasta):
+            if not (fecha_desde <= fecha_n <= fecha_hasta):
                 continue
 
             proyecciones.append({
@@ -392,7 +358,7 @@ def inyectar_proyecciones_msi(
                 "es_proyeccion":        True,
                 "mensualidad_num":      n + 1,
                 "fecha_cargo_original": t["fecha"],
-                "fecha":                fi_n.isoformat(),
+                "fecha":                fecha_n.isoformat(),
                 "descripcion":          f"{t['descripcion']} ({n+1}/{meses})",
             })
 
