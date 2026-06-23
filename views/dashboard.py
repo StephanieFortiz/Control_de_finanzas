@@ -296,7 +296,7 @@ def render():
     st.divider()
 
     # ── 4. Tendencia semanal (año a la fecha) ────────────────────────────────
-    st.markdown("##### 📈 Tendencia de gastos — año a la fecha")
+    st.markdown("##### 📈 Gasto mensual — año a la fecha")
 
     desde_ytd = f"{hoy.year}-01-01"
     hasta_ytd = hoy.isoformat()
@@ -312,31 +312,30 @@ def render():
         )
     gastos_ytd = [t for t in txs_ytd if t["tipo"] == "gasto"]
 
-    def _lunes_de(fecha_str: str) -> str:
-        d = date.fromisoformat(fecha_str)
-        return (d - timedelta(days=d.weekday())).isoformat()
-
-    gastos_por_semana: dict[str, float] = defaultdict(float)
+    gastos_por_mes: dict[str, float] = defaultdict(float)
     for t in gastos_ytd:
-        gastos_por_semana[_lunes_de(t["fecha"])] += _monto_efectivo(t)
+        mes_key = t["fecha"][:7]  # "YYYY-MM"
+        gastos_por_mes[mes_key] += _monto_efectivo(t)
 
-    semanas_ord = sorted(gastos_por_semana)
-    montos_sem  = [gastos_por_semana[s] for s in semanas_ord]
+    meses_ord  = sorted(gastos_por_mes)
+    montos_mes = [gastos_por_mes[m] for m in meses_ord]
     acum_sem: list[float] = []
     acc = 0.0
-    for m in montos_sem:
+    for m in montos_mes:
         acc += m
         acum_sem.append(round(acc, 2))
 
-    labels_sem = [date.fromisoformat(s).strftime("%d %b") for s in semanas_ord]
+    labels_sem = [
+        MESES_ES[int(m[5:7])] + " " + m[:4] for m in meses_ord
+    ]
 
     fig_trend = go.Figure()
     fig_trend.add_trace(go.Bar(
-        x=labels_sem, y=montos_sem,
-        name="Gasto semanal",
+        x=labels_sem, y=montos_mes,
+        name="Gasto mensual",
         marker_color="#378ADD",
         opacity=0.65,
-        hovertemplate="<b>Sem %{x}</b><br>$%{y:,.2f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>$%{y:,.2f}<extra></extra>",
     ))
     fig_trend.add_trace(go.Scatter(
         x=labels_sem, y=acum_sem,
@@ -345,7 +344,7 @@ def render():
         mode="lines+markers",
         marker=dict(size=5, color="#E24B4A"),
         yaxis="y2",
-        hovertemplate="<b>Sem %{x}</b><br>Acum: $%{y:,.2f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Acum: $%{y:,.2f}<extra></extra>",
     ))
     fig_trend.update_layout(
         height=300,
@@ -353,7 +352,7 @@ def render():
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(showgrid=False, tickangle=-40),
-        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$", title="Semanal"),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$", title="Mensual"),
         yaxis2=dict(overlaying="y", side="right", showgrid=False, tickprefix="$", title="Acumulado"),
         legend=dict(orientation="h", y=1.08, x=0, bgcolor="rgba(0,0,0,0)"),
         hovermode="x unified",
