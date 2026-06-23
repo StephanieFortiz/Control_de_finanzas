@@ -120,7 +120,7 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
         st.caption("Sin cargos en este período aún.")
     else:
         for t in sorted(txs_actuales, key=lambda x: x["fecha"], reverse=True):
-            _fila_transaccion(t, ajustes)
+            _fila_transaccion(t, ajustes, mostrar_editar=False)
 
     st.divider()
 
@@ -153,7 +153,7 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
                     _fila_transaccion(t, ajustes)
 
 
-def _fila_transaccion(t: dict, ajustes: dict = None):
+def _fila_transaccion(t: dict, ajustes: dict = None, mostrar_editar: bool = True):
     es_proyeccion = t.get("es_proyeccion", False)
 
     # Aplicar ajuste de monto si existe para esta mensualidad
@@ -209,7 +209,7 @@ def _fila_transaccion(t: dict, ajustes: dict = None):
     with cc:
         st.caption(t["fecha"])
     with cd:
-        if es_proyeccion:
+        if es_proyeccion and mostrar_editar:
             edit_key = f"aj_{t.get('id')}_{t.get('mensualidad_num')}"
             editando = st.session_state.get(edit_key, False)
             if st.button("✏️" if not editando else "✖️", key=f"btn_{edit_key}",
@@ -217,7 +217,7 @@ def _fila_transaccion(t: dict, ajustes: dict = None):
                 st.session_state[edit_key] = not editando
                 st.rerun()
 
-    if es_proyeccion:
+    if es_proyeccion and mostrar_editar:
         edit_key = f"aj_{t.get('id')}_{t.get('mensualidad_num')}"
         if st.session_state.get(edit_key, False):
             with st.form(f"form_{edit_key}"):
