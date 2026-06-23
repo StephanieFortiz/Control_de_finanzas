@@ -123,10 +123,29 @@ def render():
     gastos_tx   = [t for t in txs if t["tipo"] == "gasto"]
     ingresos_tx = [t for t in txs if t["tipo"] == "ingreso"]
 
-    total_gastos   = round(sum(_monto_efectivo(t) for t in gastos_tx), 2)
-    total_ingresos = round(sum(t["monto"] for t in ingresos_tx), 2)
-    ahorro         = round(total_ingresos - total_gastos, 2)
-    tasa_ahorro    = (ahorro / total_ingresos * 100) if total_ingresos > 0 else 0
+    # ── Estados de tarjetas (calculados antes de métricas para usar en total) ──
+    txs_card_base = obtener_transacciones(
+        usuario_id=uid, desde=desde_amplio, hasta=hasta
+    )
+    fecha_ref_mes = date(mes_sel["anio"], mes_sel["mes"], 1)
+    tarjetas_con_estado: list[tuple] = []
+    for tarjeta in tarjetas_usuario:
+        txs_t        = [t for t in txs_card_base if t.get("tarjeta_id") == tarjeta["id"]]
+        periodo_card = calcular_periodo_corte(fecha_ref_mes, tarjeta["dia_corte"])
+        est          = estado_tarjeta(
+            tarjeta, txs_t, fecha_corte_objetivo=periodo_card["fecha_corte"]
+        )
+        tarjetas_con_estado.append((tarjeta, est))
+
+    # Gastos = suma de pagos de tarjetas del mes + efectivo/débito del mes
+    total_tarjetas  = round(sum(est["total_periodo"] for _, est in tarjetas_con_estado), 2)
+    gastos_efectivo = round(sum(
+        _monto_efectivo(t) for t in gastos_tx if not t.get("tarjeta_id")
+    ), 2)
+    total_gastos    = round(total_tarjetas + gastos_efectivo, 2)
+    total_ingresos  = round(sum(t["monto"] for t in ingresos_tx), 2)
+    ahorro          = round(total_ingresos - total_gastos, 2)
+    tasa_ahorro     = (ahorro / total_ingresos * 100) if total_ingresos > 0 else 0
     n_cargos_reales = sum(1 for t in gastos_tx if not t.get("es_proyeccion"))
 
     # ── 1. Métricas resumen ──────────────────────────────────────────────────
@@ -146,21 +165,11 @@ def render():
     # ── 2. Estado de tarjetas ────────────────────────────────────────────────
     st.markdown("##### 💳 Estado de tarjetas")
 
-    if not tarjetas_usuario:
+    if not tarjetas_con_estado:
         st.caption("Sin tarjetas registradas.")
     else:
-        txs_card_base = obtener_transacciones(
-            usuario_id=uid, desde=desde_amplio, hasta=hasta
-        )
-        fecha_ref_mes = date(mes_sel["anio"], mes_sel["mes"], 1)
-        cols_t = st.columns(min(len(tarjetas_usuario), 4))
-
-        for col, tarjeta in zip(cols_t, tarjetas_usuario):
-            txs_t       = [t for t in txs_card_base if t.get("tarjeta_id") == tarjeta["id"]]
-            periodo_card = calcular_periodo_corte(fecha_ref_mes, tarjeta["dia_corte"])
-            est          = estado_tarjeta(
-                tarjeta, txs_t, fecha_corte_objetivo=periodo_card["fecha_corte"]
-            )
+        cols_t = st.columns(min(len(tarjetas_con_estado), 4))
+        for col, (tarjeta, est) in zip(cols_t, tarjetas_con_estado):
             color = (
                 "#E24B4A" if est["porcentaje_limite"] > 85
                 else "#EF9F27" if est["porcentaje_limite"] > 60
