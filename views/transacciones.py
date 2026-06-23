@@ -185,7 +185,7 @@ def render():
 
     orden = st.selectbox(
         "Ordenar por",
-        ["Fecha (más reciente)", "Fecha (más antigua)",
+        ["Más reciente agregada", "Fecha (más reciente)", "Fecha (más antigua)",
          "Monto (mayor primero)", "Monto (menor primero)",
          "Categoría A→Z", "Usuario A→Z"],
         key="hist_orden",
@@ -225,7 +225,9 @@ def render():
     def _monto_ord(t):
         return (t.get("monto_por_mes") or t["monto"]) if t.get("meses_sin_intereses", 0) > 0 else t["monto"]
 
-    if orden == "Fecha (más reciente)":
+    if orden == "Más reciente agregada":
+        txs = sorted(txs, key=lambda t: t.get("id", 0), reverse=True)
+    elif orden == "Fecha (más reciente)":
         txs = sorted(txs, key=lambda t: (t["fecha"], t.get("id", 0)), reverse=True)
     elif orden == "Fecha (más antigua)":
         txs = sorted(txs, key=lambda t: (t["fecha"], t.get("id", 0)))
