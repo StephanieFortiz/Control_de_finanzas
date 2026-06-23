@@ -196,6 +196,16 @@ def migrar_bd():
             cur.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion}")
             print(f"  Migración: {tabla}.{columna} agregada.")
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ajuste_msi (
+            id              SERIAL PRIMARY KEY,
+            transaccion_id  INTEGER NOT NULL REFERENCES transaccion(id) ON DELETE CASCADE,
+            mensualidad_num INTEGER NOT NULL,
+            monto           REAL    NOT NULL,
+            UNIQUE(transaccion_id, mensualidad_num)
+        )
+    """)
+
     conn.commit()
     cur.close()
     conn.close()

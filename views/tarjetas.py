@@ -8,7 +8,8 @@ Vista del motor de tarjetas de crédito. Muestra:
 
 import streamlit as st
 from datetime import date
-from database.queries import obtener_usuarios, obtener_tarjetas, obtener_transacciones
+from database.queries import (obtener_usuarios, obtener_tarjetas, obtener_transacciones,
+                              obtener_ajustes_msi, guardar_ajuste_msi)
 from utils.calculos import estado_tarjeta, agrupar_por_periodo, calcular_fecha_pago
 
 
@@ -60,6 +61,9 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
         hasta=hoy.strftime("%Y-%m-%d"),
     )
     txs_tarjeta = [t for t in txs if t.get("tarjeta_id") == tarjeta["id"]]
+
+    msi_ids = list({t["id"] for t in txs_tarjeta if t.get("meses_sin_intereses", 0) > 0})
+    ajustes = obtener_ajustes_msi(msi_ids)
 
     estado = estado_tarjeta(tarjeta, txs_tarjeta, hoy)
     periodo = estado["periodo_actual"]
@@ -116,7 +120,7 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
         st.caption("Sin cargos en este período aún.")
     else:
         for t in sorted(txs_actuales, key=lambda x: x["fecha"], reverse=True):
-            _fila_transaccion(t)
+            _fila_transaccion(t, ajustes)
 
     st.divider()
 
@@ -146,13 +150,20 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
             else:
                 for t in sorted(grupo["transacciones"],
                                 key=lambda x: x["fecha"], reverse=True):
-                    _fila_transaccion(t)
+                    _fila_transaccion(t, ajustes)
 
 
-def _fila_transaccion(t: dict):
-    ca, cb, cc = st.columns([3, 1.5, 1])
+def _fila_transaccion(t: dict, ajustes: dict = None):
+    es_proyeccion = t.get("es_proyeccion", False)
+
+    # Aplicar ajuste de monto si existe para esta mensualidad
+    if ajustes and es_proyeccion:
+        key = (t.get("id"), t.get("mensualidad_num"))
+        if key in ajustes:
+            t = {**t, "monto": ajustes[key], "monto_por_mes": ajustes[key]}
+
+    ca, cb, cc, cd = st.columns([2.8, 1.5, 1, 0.4])
     with ca:
-        es_proyeccion = t.get("es_proyeccion", False)
         msi_tag = ""
         if t.get("meses_sin_intereses", 0) > 0:
             if es_proyeccion:
@@ -197,3 +208,28 @@ def _fila_transaccion(t: dict):
             )
     with cc:
         st.caption(t["fecha"])
+    with cd:
+        if es_proyeccion:
+            edit_key = f"aj_{t.get('id')}_{t.get('mensualidad_num')}"
+            editando = st.session_state.get(edit_key, False)
+            if st.button("✏️" if not editando else "✖️", key=f"btn_{edit_key}",
+                         help="Ajustar monto" if not editando else "Cancelar"):
+                st.session_state[edit_key] = not editando
+                st.rerun()
+
+    if es_proyeccion:
+        edit_key = f"aj_{t.get('id')}_{t.get('mensualidad_num')}"
+        if st.session_state.get(edit_key, False):
+            with st.form(f"form_{edit_key}"):
+                num = t.get("mensualidad_num", "")
+                total_meses = t.get("meses_sin_intereses", "")
+                st.caption(f"Ajuste de monto — mensualidad {num}/{total_meses}")
+                nuevo_monto = st.number_input(
+                    "Monto", value=float(t["monto_por_mes"]),
+                    min_value=0.01, step=0.01, format="%.2f",
+                    label_visibility="collapsed",
+                )
+                if st.form_submit_button("Guardar ajuste", type="primary"):
+                    guardar_ajuste_msi(t["id"], t["mensualidad_num"], nuevo_monto)
+                    st.session_state[edit_key] = False
+                    st.rerun()

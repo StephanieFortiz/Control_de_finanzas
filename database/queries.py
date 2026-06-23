@@ -355,6 +355,33 @@ def eliminar_transaccion(transaccion_id: int):
     conn.close()
 
 
+def guardar_ajuste_msi(transaccion_id: int, mensualidad_num: int, monto: float) -> None:
+    conn = get_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO ajuste_msi (transaccion_id, mensualidad_num, monto)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (transaccion_id, mensualidad_num)
+            DO UPDATE SET monto = EXCLUDED.monto
+        """, (transaccion_id, mensualidad_num, monto))
+    conn.commit()
+    conn.close()
+
+
+def obtener_ajustes_msi(transaccion_ids: list) -> dict:
+    """Retorna {(transaccion_id, mensualidad_num): monto} para los IDs dados."""
+    if not transaccion_ids:
+        return {}
+    conn = get_connection()
+    result = _rows(conn,
+        "SELECT transaccion_id, mensualidad_num, monto FROM ajuste_msi "
+        "WHERE transaccion_id = ANY(%s)",
+        (transaccion_ids,)
+    )
+    conn.close()
+    return {(r["transaccion_id"], r["mensualidad_num"]): r["monto"] for r in result}
+
+
 # ======================================================================
 # PRÉSTAMOS
 # ======================================================================
