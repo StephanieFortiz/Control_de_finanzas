@@ -12,7 +12,8 @@ Dashboard principal. Flujo de lo general a lo particular:
 import streamlit as st
 import plotly.graph_objects as go
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
+import calendar as _cal
 from database.queries import (
     obtener_usuarios, obtener_transacciones, obtener_tarjetas,
 )
@@ -30,40 +31,27 @@ def _monto_efectivo(t: dict) -> float:
     return t["monto"]
 
 
-def _opciones_periodos(dia_corte: int, n: int = 14) -> list[dict]:
-    """Genera n períodos de estado de cuenta (más reciente primero)."""
+def _opciones_meses(n: int = 13) -> list[dict]:
+    """Genera n meses calendario (más reciente primero, 1 mes adelante incluido)."""
     hoy = date.today()
-    periodos: list[dict] = []
-    seen: set[str] = set()
-
-    for i in range(-1, n + 4):
+    meses = []
+    for i in range(-1, n):
         mes = hoy.month - i
         anio = hoy.year
         while mes <= 0:
-            mes += 12
-            anio -= 1
-
-        p = calcular_periodo_corte(date(anio, mes, 1), dia_corte)
-        label = p["periodo_label"]
-        if label in seen:
-            continue
-        seen.add(label)
-
-        fi, fc = p["fecha_inicio"], p["fecha_corte"]
-        periodos.append({
-            "label":     f"{label}  ({fi.strftime('%d/%m')} – {fc.strftime('%d/%m/%y')})",
-            "label_short": label,
-            "desde":     fi.isoformat(),
-            "hasta":     fc.isoformat(),
-            "anio":      fc.year,
-            "mes":       fc.month,
-            "es_actual": fi <= hoy <= fc,
+            mes += 12; anio -= 1
+        while mes > 12:
+            mes -= 12; anio += 1
+        ultimo = _cal.monthrange(anio, mes)[1]
+        meses.append({
+            "label":     f"{MESES_ES[mes]} {anio}",
+            "desde":     f"{anio}-{mes:02d}-01",
+            "hasta":     f"{anio}-{mes:02d}-{ultimo:02d}",
+            "anio":      anio,
+            "mes":       mes,
+            "es_actual": i == 0,
         })
-
-        if len(periodos) >= n:
-            break
-
-    return periodos
+    return meses
 
 
 def _gauge_tarjeta(nombre: str, usado: float, limite: float, color: str):
@@ -108,18 +96,16 @@ def render():
     hoy   = date.today()
     uid   = usuario_activo["id"]
 
-    # ── Selector de período ──────────────────────────────────────────────────
+    # ── Selector de mes ──────────────────────────────────────────────────────
     tarjetas_usuario = obtener_tarjetas(uid)
-    dia_corte_ref    = tarjetas_usuario[0]["dia_corte"] if tarjetas_usuario else 1
+    meses_opts = _opciones_meses()
+    labels_m   = [m["label"] for m in meses_opts]
+    idx_actual = next((i for i, m in enumerate(meses_opts) if m["es_actual"]), 0)
 
-    periodos  = _opciones_periodos(dia_corte_ref)
-    labels    = [p["label"] for p in periodos]
-    idx_actual = next((i for i, p in enumerate(periodos) if p["es_actual"]), 0)
-
-    sel          = st.selectbox("Período", labels, index=idx_actual, key="dash_periodo")
-    periodo_sel  = periodos[labels.index(sel)]
-    desde        = periodo_sel["desde"]
-    hasta        = periodo_sel["hasta"]
+    sel      = st.selectbox("Mes", labels_m, index=idx_actual, key="dash_periodo")
+    mes_sel  = meses_opts[labels_m.index(sel)]
+    desde    = mes_sel["desde"]
+    hasta    = mes_sel["hasta"]
 
     # ── Transacciones del período ────────────────────────────────────────────
     txs = obtener_transacciones(usuario_id=uid, desde=desde, hasta=hasta)
@@ -144,7 +130,7 @@ def render():
     n_cargos_reales = sum(1 for t in gastos_tx if not t.get("es_proyeccion"))
 
     # ── 1. Métricas resumen ──────────────────────────────────────────────────
-    st.markdown(f"#### {periodo_sel['label_short']}")
+    st.markdown(f"#### {mes_sel['label']}")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("💰 Ingresos",      f"${total_ingresos:,.2f}")
     m2.metric("💸 Gastos",        f"${total_gastos:,.2f}")
@@ -166,7 +152,7 @@ def render():
         txs_card_base = obtener_transacciones(
             usuario_id=uid, desde=desde_amplio, hasta=hasta
         )
-        fecha_ref_mes = date(periodo_sel["anio"], periodo_sel["mes"], 1)
+        fecha_ref_mes = date(mes_sel["anio"], mes_sel["mes"], 1)
         cols_t = st.columns(min(len(tarjetas_usuario), 4))
 
         for col, tarjeta in zip(cols_t, tarjetas_usuario):
@@ -269,55 +255,68 @@ def render():
 
     st.divider()
 
-    # ── 4. Tendencia de gastos en el período ─────────────────────────────────
-    st.markdown("##### 📈 Tendencia de gastos")
+    # ── 4. Tendencia semanal (año a la fecha) ────────────────────────────────
+    st.markdown("##### 📈 Tendencia de gastos — año a la fecha")
 
-    gastos_por_dia: dict[str, float] = defaultdict(float)
-    for t in gastos_tx:
-        gastos_por_dia[t["fecha"]] += _monto_efectivo(t)
+    desde_ytd = f"{hoy.year}-01-01"
+    hasta_ytd = hoy.isoformat()
 
-    fechas_ord = sorted(gastos_por_dia)
-    montos_dia = [gastos_por_dia[f] for f in fechas_ord]
-    acumulado  = []
+    txs_ytd = obtener_transacciones(usuario_id=uid, desde=desde_ytd, hasta=hasta_ytd)
+    txs_msi_ytd = obtener_transacciones(
+        usuario_id=uid, desde=desde_amplio, hasta=hasta_ytd, tipo="gasto"
+    )
+    txs_msi_ytd = [t for t in txs_msi_ytd if t.get("meses_sin_intereses", 0) > 0]
+    if txs_msi_ytd:
+        txs_ytd = inyectar_proyecciones_msi(
+            txs_ytd, desde=desde_ytd, hasta=hasta_ytd, txs_msi_origen=txs_msi_ytd
+        )
+    gastos_ytd = [t for t in txs_ytd if t["tipo"] == "gasto"]
+
+    def _lunes_de(fecha_str: str) -> str:
+        d = date.fromisoformat(fecha_str)
+        return (d - timedelta(days=d.weekday())).isoformat()
+
+    gastos_por_semana: dict[str, float] = defaultdict(float)
+    for t in gastos_ytd:
+        gastos_por_semana[_lunes_de(t["fecha"])] += _monto_efectivo(t)
+
+    semanas_ord = sorted(gastos_por_semana)
+    montos_sem  = [gastos_por_semana[s] for s in semanas_ord]
+    acum_sem: list[float] = []
     acc = 0.0
-    for m in montos_dia:
+    for m in montos_sem:
         acc += m
-        acumulado.append(round(acc, 2))
+        acum_sem.append(round(acc, 2))
+
+    labels_sem = [date.fromisoformat(s).strftime("%d %b") for s in semanas_ord]
 
     fig_trend = go.Figure()
     fig_trend.add_trace(go.Bar(
-        x=fechas_ord, y=montos_dia,
-        name="Gasto diario",
+        x=labels_sem, y=montos_sem,
+        name="Gasto semanal",
         marker_color="#378ADD",
         opacity=0.65,
-        hovertemplate="<b>%{x}</b><br>$%{y:,.2f}<extra></extra>",
+        hovertemplate="<b>Sem %{x}</b><br>$%{y:,.2f}<extra></extra>",
     ))
     fig_trend.add_trace(go.Scatter(
-        x=fechas_ord, y=acumulado,
+        x=labels_sem, y=acum_sem,
         name="Acumulado",
         line=dict(color="#E24B4A", width=2.5),
         mode="lines+markers",
         marker=dict(size=5, color="#E24B4A"),
         yaxis="y2",
-        hovertemplate="<b>%{x}</b><br>Acum: $%{y:,.2f}<extra></extra>",
+        hovertemplate="<b>Sem %{x}</b><br>Acum: $%{y:,.2f}<extra></extra>",
     ))
     fig_trend.update_layout(
-        height=280,
-        margin=dict(t=10, b=10, l=0, r=60),
+        height=300,
+        margin=dict(t=10, b=10, l=0, r=70),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=False, tickformat="%d %b", tickangle=-30),
-        yaxis=dict(
-            showgrid=True, gridcolor="#f0f0f0",
-            tickprefix="$", title="Diario",
-        ),
-        yaxis2=dict(
-            overlaying="y", side="right",
-            showgrid=False, tickprefix="$", title="Acumulado",
-        ),
+        xaxis=dict(showgrid=False, tickangle=-40),
+        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$", title="Semanal"),
+        yaxis2=dict(overlaying="y", side="right", showgrid=False, tickprefix="$", title="Acumulado"),
         legend=dict(orientation="h", y=1.08, x=0, bgcolor="rgba(0,0,0,0)"),
         hovermode="x unified",
-        barmode="stack",
     )
     st.plotly_chart(fig_trend, use_container_width=True)
 
@@ -368,11 +367,11 @@ def render():
 
     st.divider()
 
-    # 5b. Gastos por categoría en cada tarjeta
+    # 5b. Gastos por categoría en cada tarjeta (barras horizontales, 2 por fila)
     st.markdown("###### Gastos por categoría en cada tarjeta")
 
     items  = list(tarjetas_en_periodo.items())
-    chunks = [items[i:i+3] for i in range(0, len(items), 3)]
+    chunks = [items[i:i+2] for i in range(0, len(items), 2)]
 
     for chunk in chunks:
         cols_chunk = st.columns(len(chunk))
@@ -387,31 +386,27 @@ def render():
                 cat_t[cat]["monto"] += _monto_efectivo(t)
                 cat_t[cat]["color"]  = t.get("categoria_color") or "#888780"
 
-            cats_t  = sorted(cat_t.items(), key=lambda x: x[1]["monto"], reverse=True)
-            total_t = sum(v["monto"] for v in cat_t.values())
+            # Ascending so el mayor queda arriba en la barra horizontal
+            cats_t = sorted(cat_t.items(), key=lambda x: x[1]["monto"])
 
             with col:
-                fig_t = go.Figure(go.Pie(
-                    labels=[c[0] for c in cats_t],
-                    values=[c[1]["monto"] for c in cats_t],
-                    hole=0.5,
-                    marker=dict(
-                        colors=[c[1]["color"] for c in cats_t],
-                        line=dict(color="#fff", width=1.5),
-                    ),
-                    textinfo="percent",
-                    textfont=dict(size=10),
-                    hovertemplate="<b>%{label}</b><br>$%{value:,.2f}<extra></extra>",
+                fig_t = go.Figure(go.Bar(
+                    x=[c[1]["monto"] for c in cats_t],
+                    y=[c[0] for c in cats_t],
+                    orientation="h",
+                    marker_color=[c[1]["color"] for c in cats_t],
+                    text=[f"${c[1]['monto']:,.0f}" for c in cats_t],
+                    textposition="outside",
+                    hovertemplate="<b>%{y}</b><br>$%{x:,.2f}<extra></extra>",
                 ))
                 fig_t.update_layout(
                     title=dict(text=tnombre, font_size=13),
-                    height=260,
-                    margin=dict(t=35, b=5, l=0, r=0),
+                    height=max(200, len(cats_t) * 38 + 70),
+                    margin=dict(t=40, b=10, l=0, r=80),
                     paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
+                    yaxis=dict(showgrid=False),
                     showlegend=False,
-                    annotations=[dict(
-                        text=f"${total_t:,.2f}", x=0.5, y=0.5,
-                        font_size=12, showarrow=False,
-                    )],
                 )
-                st.plotly_chart(fig_t, use_container_width=True, key=f"pie_t_{tid}")
+                st.plotly_chart(fig_t, use_container_width=True, key=f"bar_t_{tid}")
