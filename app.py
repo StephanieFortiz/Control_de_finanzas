@@ -68,7 +68,7 @@ with st.sidebar:
     vista = opciones[pagina]
 
     st.divider()
-    st.caption("v0.1 — Fase 2")
+    st.caption("v 2.2 — SFI")
 
 # ── Renderizar vista seleccionada ────────────────────────────────────────
 if not hay_usuarios and vista != "configuracion":
