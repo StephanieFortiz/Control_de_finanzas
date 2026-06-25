@@ -8,7 +8,8 @@ from database.queries import (
     obtener_usuarios, obtener_cuentas, obtener_tarjetas,
     obtener_categorias, crear_transaccion, actualizar_transaccion,
     obtener_transacciones, eliminar_transaccion, obtener_transaccion,
-    obtener_tarjetas_todas,
+    obtener_tarjetas_todas, obtener_prestamos_por_tx_ids,
+    obtener_pagos_prestamo, registrar_pago_prestamo,
 )
 from utils.calculos import MESES_ES, inyectar_proyecciones_msi
 
@@ -130,13 +131,34 @@ def render():
     usuario_activo = st.session_state.get("usuario_activo", usuarios[0])
 
     # ── Nueva transacción ──────────────────────────────────────────────
-    st.markdown("#### Nueva transacción")
-    res = _form_transaccion("nueva", usuario_activo, usuarios)
-    if res:
-        crear_transaccion(usuario_id=usuario_activo["id"], **res)
-        _limpiar_keys("nueva")
-        st.success(f"✅ Guardado: {res['descripcion']} — {_fmt(res['monto'])}")
-        st.rerun()
+    # Si hay un préstamo pendiente de configurar, mostrar ese panel primero
+    if "prest_pendiente" in st.session_state:
+        from views.prestamos import seccion_nuevo_prestamo
+        seccion_nuevo_prestamo(usuario_activo, usuarios)
+        st.divider()
+    else:
+        st.markdown("#### Nueva transacción")
+        es_prestamo = st.checkbox(
+            "💸 Es préstamo o apoyo",
+            key="nueva_es_prestamo",
+            help="Marca si alguien va a pagarte parte de este gasto, o si tú pagaste por alguien",
+        )
+        res = _form_transaccion("nueva", usuario_activo, usuarios)
+        if res:
+            tx_id = crear_transaccion(usuario_id=usuario_activo["id"], **res)
+            _limpiar_keys("nueva")
+            if st.session_state.get("nueva_es_prestamo"):
+                st.session_state["prest_pendiente"] = {
+                    "tx_id":               tx_id,
+                    "monto":               res["monto"],
+                    "descripcion":         res["descripcion"],
+                    "fecha":               res["fecha"],
+                    "meses_sin_intereses": res["meses_sin_intereses"],
+                }
+                st.session_state.pop("nueva_es_prestamo", None)
+            else:
+                st.success(f"✅ Guardado: {res['descripcion']} — {_fmt(res['monto'])}")
+            st.rerun()
 
     st.divider()
 
@@ -243,6 +265,10 @@ def render():
         st.caption("No hay transacciones con estos filtros.")
         return
 
+    # Mapa de préstamos para mostrar botón inline de abono
+    tx_ids_reales = [t["id"] for t in txs if not t.get("es_proyeccion")]
+    prestamos_tx  = obtener_prestamos_por_tx_ids(tx_ids_reales)
+
     g_sum = sum(
         (t.get("monto_por_mes") or t["monto"]) if t.get("meses_sin_intereses", 0) > 0 else t["monto"]
         for t in txs if t["tipo"] == "gasto"
@@ -336,4 +362,72 @@ def render():
                 st.success("✅ Transacción actualizada.")
                 st.rerun()
 
+        # ── Mini-form de abono si esta tx tiene un préstamo pendiente ──
+        prest = prestamos_tx.get(t.get("id"))
+        if prest:
+            pendiente = prest["monto_pendiente"]
+            abn_key   = f"abn_tx_{t['id']}"
+            col_tag, col_btn = st.columns([4, 1])
+            with col_tag:
+                st.markdown(
+                    f"<span style='background:#E6F1FB;color:#0C447C;font-size:11px;"
+                    f"padding:2px 8px;border-radius:4px'>💸 Préstamo · resta \${pendiente:,.2f}</span>",
+                    unsafe_allow_html=True,
+                )
+            with col_btn:
+                if st.button("Abonar", key=f"btn_{abn_key}", help="Registrar abono"):
+                    st.session_state[abn_key] = not st.session_state.get(abn_key, False)
+                    st.rerun()
+            if st.session_state.get(abn_key):
+                _mini_form_abono(prest, abn_key)
+
         st.divider()
+
+
+def _mini_form_abono(prest: dict, form_key: str):
+    """Mini formulario inline de abono para la vista de transacciones."""
+    pagos = obtener_pagos_prestamo(prest["id"])
+    meses_msi     = prest.get("meses_msi", 0)
+    meses_pagados = {pg["numero_mes"] for pg in pagos if pg.get("numero_mes")}
+
+    with st.form(f"mini_abono_{prest['id']}", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            monto_ab = st.number_input(
+                "Monto ($)", min_value=0.01,
+                value=float(prest.get("monto_por_mes") or prest["monto_pendiente"]),
+                step=50.0, format="%.2f",
+            )
+        with c2:
+            fecha_ab = st.date_input("Fecha", value=date.today())
+        with c3:
+            tipo_ab = st.selectbox(
+                "Tipo", ["Pago normal", "Pago adelantado", "Pago condonado"]
+            )
+
+        numero_mes = None
+        if meses_msi > 0:
+            disponibles = [m for m in range(1, meses_msi + 1) if m not in meses_pagados]
+            if disponibles:
+                numero_mes = st.selectbox("Mes MSI", disponibles)
+
+        notas_ab = st.text_input("Notas (opcional)")
+        c_ok, c_cancel = st.columns(2)
+        with c_ok:
+            guardar  = st.form_submit_button("Guardar abono", type="primary")
+        with c_cancel:
+            cancelar = st.form_submit_button("Cancelar")
+
+    tipo_db = {"Pago normal": "pago", "Pago adelantado": "adelantado", "Pago condonado": "condonado"}[tipo_ab]
+    if guardar:
+        registrar_pago_prestamo(
+            prestamo_id=prest["id"], monto=monto_ab,
+            fecha=str(fecha_ab), notas=notas_ab,
+            tipo=tipo_db, numero_mes=numero_mes,
+        )
+        st.session_state.pop(form_key, None)
+        st.success("✅ Abono registrado.")
+        st.rerun()
+    if cancelar:
+        st.session_state.pop(form_key, None)
+        st.rerun()

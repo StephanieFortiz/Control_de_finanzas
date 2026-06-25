@@ -179,12 +179,17 @@ def migrar_bd():
     cur = conn.cursor()
 
     migraciones = [
-        ("transaccion", "notas",                "TEXT NOT NULL DEFAULT ''"),
-        ("transaccion", "meses_sin_intereses",  "INTEGER NOT NULL DEFAULT 0"),
-        ("transaccion", "monto_por_mes",        "REAL NOT NULL DEFAULT 0.0"),
-        ("prestamo",    "transaccion_id",       "INTEGER REFERENCES transaccion(id)"),
-        ("prestamo",    "fecha_estimada_pago",  "TEXT"),
-        ("categoria",   "activa",               "INTEGER NOT NULL DEFAULT 1"),
+        ("transaccion",   "notas",               "TEXT NOT NULL DEFAULT ''"),
+        ("transaccion",   "meses_sin_intereses", "INTEGER NOT NULL DEFAULT 0"),
+        ("transaccion",   "monto_por_mes",       "REAL NOT NULL DEFAULT 0.0"),
+        ("prestamo",      "transaccion_id",      "INTEGER REFERENCES transaccion(id)"),
+        ("prestamo",      "fecha_estimada_pago", "TEXT"),
+        ("categoria",     "activa",              "INTEGER NOT NULL DEFAULT 1"),
+        ("prestamo",      "tipo_pago",           "TEXT NOT NULL DEFAULT 'abonos'"),
+        ("prestamo",      "meses_msi",           "INTEGER"),
+        ("prestamo",      "monto_por_mes",       "REAL"),
+        ("pago_prestamo", "tipo",                "TEXT NOT NULL DEFAULT 'pago'"),
+        ("pago_prestamo", "numero_mes",          "INTEGER"),
     ]
 
     for tabla, columna, definicion in migraciones:

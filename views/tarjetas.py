@@ -9,7 +9,9 @@ Vista del motor de tarjetas de crédito. Muestra:
 import streamlit as st
 from datetime import date
 from database.queries import (obtener_usuarios, obtener_tarjetas, obtener_transacciones,
-                              obtener_ajustes_msi, guardar_ajuste_msi)
+                              obtener_ajustes_msi, guardar_ajuste_msi,
+                              obtener_prestamos_por_tx_ids, obtener_pagos_prestamo,
+                              registrar_pago_prestamo)
 from utils.calculos import estado_tarjeta, agrupar_por_periodo, calcular_fecha_pago
 
 
@@ -62,8 +64,10 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
     )
     txs_tarjeta = [t for t in txs if t.get("tarjeta_id") == tarjeta["id"]]
 
-    msi_ids = list({t["id"] for t in txs_tarjeta if t.get("meses_sin_intereses", 0) > 0})
-    ajustes = obtener_ajustes_msi(msi_ids)
+    msi_ids      = list({t["id"] for t in txs_tarjeta if t.get("meses_sin_intereses", 0) > 0})
+    ajustes      = obtener_ajustes_msi(msi_ids)
+    tx_ids_real  = [t["id"] for t in txs_tarjeta]
+    prestamos_tx = obtener_prestamos_por_tx_ids(tx_ids_real)
 
     estado = estado_tarjeta(tarjeta, txs_tarjeta, hoy)
     periodo = estado["periodo_actual"]
@@ -120,7 +124,7 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
         st.caption("Sin cargos en este período aún.")
     else:
         for t in sorted(txs_actuales, key=lambda x: x["fecha"], reverse=True):
-            _fila_transaccion(t, ajustes, mostrar_editar=False)
+            _fila_transaccion(t, ajustes, prestamos_tx, mostrar_editar=False)
 
     st.divider()
 
@@ -150,10 +154,10 @@ def _render_tarjeta(tarjeta: dict, usuario_activo: dict, hoy: date):
             else:
                 for t in sorted(grupo["transacciones"],
                                 key=lambda x: x["fecha"], reverse=True):
-                    _fila_transaccion(t, ajustes)
+                    _fila_transaccion(t, ajustes, prestamos_tx)
 
 
-def _fila_transaccion(t: dict, ajustes: dict = None, mostrar_editar: bool = True):
+def _fila_transaccion(t: dict, ajustes: dict = None, prestamos_tx: dict = None, mostrar_editar: bool = True):
     es_proyeccion = t.get("es_proyeccion", False)
 
     # Aplicar ajuste de monto si existe para esta mensualidad
@@ -233,3 +237,67 @@ def _fila_transaccion(t: dict, ajustes: dict = None, mostrar_editar: bool = True
                     guardar_ajuste_msi(t["id"], t["mensualidad_num"], nuevo_monto)
                     st.session_state[edit_key] = False
                     st.rerun()
+
+    # ── Badge de préstamo + mini-form de abono ──────────────────────────
+    tid = t.get("id")
+    prest = (prestamos_tx or {}).get(tid) if not es_proyeccion else None
+    if prest:
+        pendiente = prest["monto_pendiente"]
+        abn_key   = f"abn_tar_{tid}"
+        col_tag, col_btn = st.columns([4, 1])
+        with col_tag:
+            st.markdown(
+                f"<span style='background:#E6F1FB;color:#0C447C;font-size:11px;"
+                f"padding:2px 8px;border-radius:4px'>💸 Préstamo · resta \${pendiente:,.2f}</span>",
+                unsafe_allow_html=True,
+            )
+        with col_btn:
+            if st.button("Abonar", key=f"btn_{abn_key}"):
+                st.session_state[abn_key] = not st.session_state.get(abn_key, False)
+                st.rerun()
+        if st.session_state.get(abn_key):
+            _mini_form_abono_tar(prest, abn_key)
+
+
+def _mini_form_abono_tar(prest: dict, form_key: str):
+    pagos = obtener_pagos_prestamo(prest["id"])
+    meses_msi     = prest.get("meses_msi", 0)
+    meses_pagados = {pg["numero_mes"] for pg in pagos if pg.get("numero_mes")}
+
+    with st.form(f"mini_abono_tar_{prest['id']}", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            monto_ab = st.number_input(
+                "Monto ($)", min_value=0.01,
+                value=float(prest.get("monto_por_mes") or prest["monto_pendiente"]),
+                step=50.0, format="%.2f",
+            )
+        with c2:
+            fecha_ab = st.date_input("Fecha", value=date.today())
+        with c3:
+            tipo_ab = st.selectbox("Tipo", ["Pago normal", "Pago adelantado", "Pago condonado"])
+        numero_mes = None
+        if meses_msi > 0:
+            disponibles = [m for m in range(1, meses_msi + 1) if m not in meses_pagados]
+            if disponibles:
+                numero_mes = st.selectbox("Mes MSI", disponibles)
+        notas_ab = st.text_input("Notas (opcional)")
+        c_ok, c_cancel = st.columns(2)
+        with c_ok:
+            guardar  = st.form_submit_button("Guardar abono", type="primary")
+        with c_cancel:
+            cancelar = st.form_submit_button("Cancelar")
+
+    tipo_db = {"Pago normal": "pago", "Pago adelantado": "adelantado", "Pago condonado": "condonado"}[tipo_ab]
+    if guardar:
+        registrar_pago_prestamo(
+            prestamo_id=prest["id"], monto=monto_ab,
+            fecha=str(fecha_ab), notas=notas_ab,
+            tipo=tipo_db, numero_mes=numero_mes,
+        )
+        st.session_state.pop(form_key, None)
+        st.success("✅ Abono registrado.")
+        st.rerun()
+    if cancelar:
+        st.session_state.pop(form_key, None)
+        st.rerun()

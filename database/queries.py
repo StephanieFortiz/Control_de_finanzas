@@ -395,6 +395,9 @@ def crear_prestamo(
     notas: str = "",
     transaccion_id: Optional[int] = None,
     fecha_estimada_pago: Optional[str] = None,
+    tipo_pago: str = "abonos",
+    meses_msi: Optional[int] = None,
+    monto_por_mes: Optional[float] = None,
 ) -> int:
     if acreedor_id is None and nombre_externo is None:
         raise ValueError("Debe haber un acreedor (usuario o nombre externo).")
@@ -405,12 +408,14 @@ def crear_prestamo(
             """INSERT INTO prestamo
                (acreedor_id, deudor_id, nombre_externo,
                 monto_original, monto_pendiente, fecha, notas,
-                transaccion_id, fecha_estimada_pago)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                transaccion_id, fecha_estimada_pago,
+                tipo_pago, meses_msi, monto_por_mes)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                RETURNING id""",
             (acreedor_id, deudor_id, nombre_externo,
              monto, monto,
-             fecha, notas, transaccion_id, fecha_estimada_pago)
+             fecha, notas, transaccion_id, fecha_estimada_pago,
+             tipo_pago, meses_msi, monto_por_mes)
         )
         nuevo_id = cur.fetchone()[0]
     conn.commit()
@@ -458,8 +463,14 @@ def obtener_prestamos(
     return result
 
 
-def registrar_pago_prestamo(prestamo_id: int, monto: float,
-                             fecha: str, notas: str = "") -> int:
+def registrar_pago_prestamo(
+    prestamo_id: int,
+    monto: float,
+    fecha: str,
+    notas: str = "",
+    tipo: str = "pago",
+    numero_mes: Optional[int] = None,
+) -> int:
     conn = get_connection()
     prestamo = _row(conn,
         "SELECT monto_pendiente FROM prestamo WHERE id = %s", (prestamo_id,)
@@ -478,14 +489,41 @@ def registrar_pago_prestamo(prestamo_id: int, monto: float,
             (max(nuevo_pendiente, 0), nuevo_estado, prestamo_id)
         )
         cur.execute(
-            "INSERT INTO pago_prestamo (prestamo_id, monto, fecha, notas) "
-            "VALUES (%s, %s, %s, %s) RETURNING id",
-            (prestamo_id, monto, fecha, notas)
+            "INSERT INTO pago_prestamo (prestamo_id, monto, fecha, notas, tipo, numero_mes) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (prestamo_id, monto, fecha, notas, tipo, numero_mes)
         )
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
     return nuevo_id
+
+
+def obtener_pagos_prestamo(prestamo_id: int) -> list[dict]:
+    conn = get_connection()
+    result = _rows(conn,
+        "SELECT * FROM pago_prestamo WHERE prestamo_id = %s ORDER BY fecha, id",
+        (prestamo_id,)
+    )
+    conn.close()
+    return result
+
+
+def obtener_prestamos_por_tx_ids(tx_ids: list) -> dict:
+    """Retorna {transaccion_id: prestamo_dict} para transacciones con préstamo pendiente."""
+    if not tx_ids:
+        return {}
+    conn = get_connection()
+    rows = _rows(conn,
+        """SELECT p.*, ua.nombre AS acreedor_nombre, ud.nombre AS deudor_nombre
+           FROM prestamo p
+           LEFT JOIN usuario ua ON p.acreedor_id = ua.id
+           LEFT JOIN usuario ud ON p.deudor_id   = ud.id
+           WHERE p.transaccion_id = ANY(%s) AND p.estado = 'pendiente'""",
+        (tx_ids,)
+    )
+    conn.close()
+    return {r["transaccion_id"]: r for r in rows if r.get("transaccion_id")}
 
 
 def eliminar_prestamo(prestamo_id: int):

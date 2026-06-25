@@ -51,12 +51,11 @@ with st.sidebar:
         st.divider()
 
     opciones = {
-        "📊 Dashboard":        "dashboard",
-        "📋 Transacciones":     "transacciones",
-        "💳 Tarjetas":          "tarjetas",
-        "🤝 Préstamos":         "prestamos",
-        "⚖️  Liquidar cuentas": "liquidaciones",
-        "⚙️  Configuración":    "configuracion",
+        "📊 Dashboard":     "dashboard",
+        "📋 Transacciones": "transacciones",
+        "💳 Tarjetas":      "tarjetas",
+        "🤝 Préstamos":     "prestamos",
+        "⚙️  Configuración": "configuracion",
     }
 
     pagina = st.radio(
@@ -86,9 +85,6 @@ elif vista == "tarjetas":
     render()
 elif vista == "prestamos":
     from views.prestamos import render
-    render()
-elif vista == "liquidaciones":
-    from views.liquidaciones import render
     render()
 elif vista == "configuracion":
     from views.configuracion import render

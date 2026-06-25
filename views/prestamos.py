@@ -4,23 +4,10 @@ views/prestamos.py
 import streamlit as st
 from datetime import date
 from database.queries import (
-    obtener_usuarios, obtener_prestamos,
-    crear_prestamo, registrar_pago_prestamo,
-    eliminar_prestamo,
-    obtener_transacciones_para_prestamo,
+    obtener_usuarios, obtener_prestamos, obtener_pagos_prestamo,
+    crear_prestamo, registrar_pago_prestamo, eliminar_prestamo,
 )
-from utils.calculos import MESES_ES
-
-
-def _badge_estado(estado: str) -> str:
-    estilos = {
-        "pendiente": "background:#FAEEDA;color:#633806",
-        "pagado":    "background:#EAF3DE;color:#27500A",
-        "cancelado": "background:#F1EFE8;color:#444441",
-    }
-    s = estilos.get(estado, estilos["pendiente"])
-    return (f"<span style='{s};font-size:11px;"
-            f"padding:2px 8px;border-radius:4px'>{estado.capitalize()}</span>")
+from utils.calculos import MESES_ES, _fecha_mas_n_meses
 
 
 def render():
@@ -31,437 +18,419 @@ def render():
         return
 
     usuario_activo = st.session_state.get("usuario_activo", usuarios[0])
-    otro_usuario   = next(u for u in usuarios if u["id"] != usuario_activo["id"])
 
-    tab_pend, tab_hist, tab_desde_gasto, tab_nuevo = st.tabs(
-        ["📋 Pendientes", "📂 Historial", "🧾 Desde un gasto", "➕ Nuevo manual"]
-    )
+    tab_pend, tab_arch = st.tabs(["📋 Pendientes", "📦 Archivados"])
     with tab_pend:
-        _render_pendientes(usuario_activo, otro_usuario)
-    with tab_hist:
-        _render_historial(usuario_activo)
-    with tab_desde_gasto:
-        _render_desde_gasto(usuario_activo, otro_usuario, usuarios)
-    with tab_nuevo:
-        _render_nuevo_manual(usuario_activo, otro_usuario, usuarios)
+        _tab_pendientes(usuario_activo)
+    with tab_arch:
+        _tab_archivados(usuario_activo)
 
 
-# ── Pendientes ───────────────────────────────────────────────────────────
+# ── Pendientes ───────────────────────────────────────────────────────────────
 
-def _render_pendientes(usuario_activo: dict, otro_usuario: dict):
-    prestamos = obtener_prestamos(usuario_id=usuario_activo["id"], estado="pendiente")
-    if not prestamos:
-        st.info("No tienes préstamos pendientes.")
-        return
+def _tab_pendientes(usuario_activo: dict):
+    uid = usuario_activo["id"]
+    prestamos = obtener_prestamos(usuario_id=uid, estado="pendiente")
 
-    yo_debo  = [p for p in prestamos if p["deudor_id"]   == usuario_activo["id"]]
-    me_deben = [p for p in prestamos if p["acreedor_id"] == usuario_activo["id"]]
+    yo_debo  = [p for p in prestamos if p["deudor_id"]   == uid]
+    me_deben = [p for p in prestamos if p["acreedor_id"] == uid]
 
     c1, c2 = st.columns(2)
-    c1.metric("Yo debo",  f"${sum(p['monto_pendiente'] for p in yo_debo):,.2f}",
-              delta=f"{len(yo_debo)} préstamo(s)", delta_color="inverse")
-    c2.metric("Me deben", f"${sum(p['monto_pendiente'] for p in me_deben):,.2f}",
-              delta=f"{len(me_deben)} préstamo(s)", delta_color="off")
+    c1.metric("Yo debo",
+              f"${sum(p['monto_pendiente'] for p in yo_debo):,.2f}",
+              f"{len(yo_debo)} préstamo(s)", delta_color="inverse")
+    c2.metric("Me deben",
+              f"${sum(p['monto_pendiente'] for p in me_deben):,.2f}",
+              f"{len(me_deben)} préstamo(s)", delta_color="off")
+
     st.divider()
 
-    for titulo, lista in [("Lo que yo debo", yo_debo), ("Lo que me deben", me_deben)]:
-        if not lista:
-            continue
-        st.markdown(f"**{titulo}**")
-        for p in lista:
-            _render_tarjeta_prestamo(p, usuario_activo, puede_abonar=True)
+    filtro = st.radio(
+        "Mostrar", ["Todos", "Lo que yo debo", "Lo que me deben"],
+        horizontal=True, key="prest_filtro",
+    )
 
-
-# ── Historial ────────────────────────────────────────────────────────────
-
-def _render_historial(usuario_activo: dict):
-    todos    = obtener_prestamos(usuario_id=usuario_activo["id"])
-    cerrados = [p for p in todos if p["estado"] in ("pagado", "cancelado")]
-    if not cerrados:
-        st.caption("Sin préstamos liquidados aún.")
-        return
-    for p in cerrados:
-        _render_tarjeta_prestamo(p, usuario_activo, puede_abonar=False)
-
-
-# ── Tarjeta de préstamo ──────────────────────────────────────────────────
-
-def _render_tarjeta_prestamo(p: dict, usuario_activo: dict, puede_abonar: bool):
-    progreso = 1 - (p["monto_pendiente"] / p["monto_original"]) if p["monto_original"] > 0 else 1
-
-    if p["acreedor_id"] == usuario_activo["id"]:
-        contraparte = p["deudor_nombre"] or p["nombre_externo"] or "Externo"
-        direccion   = f"Le presté a {contraparte}"
-    elif p["deudor_id"] == usuario_activo["id"]:
-        contraparte = p["acreedor_nombre"] or p["nombre_externo"] or "Externo"
-        direccion   = f"Me prestó {contraparte}"
+    if filtro == "Todos":
+        lista = [(p, "debo") for p in yo_debo] + [(p, "me_deben") for p in me_deben]
+    elif filtro == "Lo que yo debo":
+        lista = [(p, "debo") for p in yo_debo]
     else:
-        direccion = p["nombre_externo"] or "Externo"
+        lista = [(p, "me_deben") for p in me_deben]
 
-    # Badge de fecha estimada si existe
-    fecha_est_html = ""
-    if p.get("fecha_estimada_pago"):
-        fecha_est_html = (
-            f" <span style='background:#E6F1FB;color:#0C447C;font-size:11px;"
-            f"padding:2px 7px;border-radius:4px'>Pago est. {p['fecha_estimada_pago']}</span>"
-        )
+    if not lista:
+        st.info("No hay préstamos en esta categoría.")
+        return
 
-    # Badge de gasto vinculado
-    gasto_html = ""
-    if p.get("tx_descripcion"):
-        if p.get("tx_tarjeta_nombre"):
-            origen = f"💳 {p['tx_tarjeta_nombre']} ({p['tx_tarjeta_banco']})"
-        elif p.get("tx_cuenta_nombre"):
-            origen = f"🏦 {p['tx_cuenta_nombre']}"
-        else:
-            origen = ""
-        origen_html = f" · {origen}" if origen else ""
-        gasto_html = (
-            f"<br><span style='font-size:11px;color:#888'>🧾 Gasto: "
-            f"{p['tx_descripcion']} · ${p['tx_monto']:,.2f}{origen_html}</span>"
-        )
+    for p, direccion in lista:
+        _render_prestamo(p, usuario_activo, direccion, puede_abonar=True)
 
-    sin_pagos = p["monto_pendiente"] == p["monto_original"]
 
-    col_a, col_b, col_c, col_d = st.columns([3, 2, 1, 1])
+# ── Archivados ───────────────────────────────────────────────────────────────
+
+def _tab_archivados(usuario_activo: dict):
+    uid = usuario_activo["id"]
+    todos = obtener_prestamos(usuario_id=uid)
+    archivados = [p for p in todos if p["estado"] in ("pagado", "cancelado")]
+    if not archivados:
+        st.info("No hay préstamos archivados aún.")
+        return
+    for p in archivados:
+        dir_p = "debo" if p["deudor_id"] == uid else "me_deben"
+        _render_prestamo(p, usuario_activo, dir_p, puede_abonar=False)
+
+
+# ── Tarjeta de préstamo ──────────────────────────────────────────────────────
+
+def _contraparte(p: dict, uid: int) -> str:
+    if p["acreedor_id"] == uid:
+        return p.get("deudor_nombre") or p.get("nombre_externo") or "Externo"
+    return p.get("acreedor_nombre") or p.get("nombre_externo") or "Externo"
+
+
+def _render_prestamo(p: dict, usuario_activo: dict, direccion: str, puede_abonar: bool):
+    uid = usuario_activo["id"]
+    contraparte  = _contraparte(p, uid)
+    monto_pagado = round(p["monto_original"] - p["monto_pendiente"], 2)
+    progreso     = monto_pagado / p["monto_original"] if p["monto_original"] > 0 else 0
+
+    cargo = p.get("tx_descripcion") or p.get("notas") or "—"
+    tarjeta_str = ""
+    if p.get("tx_tarjeta_nombre"):
+        tarjeta_str = f"{p['tx_tarjeta_nombre']} ({p.get('tx_tarjeta_banco','')})"
+    elif p.get("tx_cuenta_nombre"):
+        tarjeta_str = p["tx_cuenta_nombre"]
+
+    tipo_map = {"unico": "Pago único", "abonos": "Abonos libres",
+                "msi": f"MSI · {p.get('meses_msi','?')} meses"}
+    tipo_label = tipo_map.get(p.get("tipo_pago", "abonos"), "Abonos libres")
+    dir_label  = "⬆️ Me deben" if direccion == "me_deben" else "⬇️ Yo debo"
+
+    color_resta = "#E24B4A" if p["monto_pendiente"] > 0 else "#639922"
+    color_bar   = "#639922" if progreso >= 1 else "#378ADD"
+
+    # ── Fila de datos ──
+    col_a, col_b, col_c, col_d, col_e, col_f, col_g = st.columns([3, 1.5, 1.2, 1.2, 1.2, 1.5, 1])
+
     with col_a:
         st.markdown(
-            f"**{p['notas'] or direccion}** {_badge_estado(p['estado'])}"
-            f"{fecha_est_html}  \n"
-            f"<span style='font-size:12px;color:gray'>{direccion} · {p['fecha']}</span>"
-            f"{gasto_html}",
+            f"**{cargo}**  \n"
+            f"<span style='font-size:12px;color:gray'>"
+            f"{dir_label} · **{contraparte}** · {tipo_label}</span>",
             unsafe_allow_html=True,
         )
     with col_b:
-        color_b = "#639922" if progreso >= 1 else "#378ADD"
-        st.markdown(
-            f"Pendiente: \${p['monto_pendiente']:,.2f}  \n"
-            f"<span style='font-size:11px;color:gray'>de ${p['monto_original']:,.2f}</span>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f"<div style='background:#eee;border-radius:4px;height:5px;margin-top:4px'>"
-            f"<div style='background:{color_b};width:{progreso*100:.1f}%;"
-            f"height:5px;border-radius:4px'></div></div>",
-            unsafe_allow_html=True,
-        )
+        st.caption(f"📅 {p['fecha']}")
+        if tarjeta_str:
+            st.caption(f"💳 {tarjeta_str}")
     with col_c:
-        if puede_abonar and p["estado"] == "pendiente":
-            if st.button("💸 Abonar", key=f"abonar_{p['id']}"):
-                st.session_state[f"abonando_{p['id']}"] = True
+        st.markdown(f"**\${p['monto_original']:,.2f}**")
+        st.caption("Total")
     with col_d:
-        if sin_pagos:
-            if st.button("🗑", key=f"del_{p['id']}", help="Eliminar préstamo"):
-                st.session_state[f"confirmando_eliminar_{p['id']}"] = True
-
-    if st.session_state.get(f"abonando_{p['id']}"):
-        with st.form(key=f"form_abono_{p['id']}"):
-            st.markdown(f"**Registrar abono** — pendiente: ${p['monto_pendiente']:,.2f}")
-            cm, cf = st.columns(2)
-            with cm:
-                monto_ab = st.number_input("Monto ($)", min_value=0.01,
-                                           max_value=float(p["monto_pendiente"]),
-                                           value=float(p["monto_pendiente"]),
-                                           step=100.0, format="%.2f")
-            with cf:
-                fecha_ab = st.date_input("Fecha", value=date.today())
-            notas_ab = st.text_input("Notas (opcional)", placeholder="Ej: Transferencia BBVA")
-            c_ok, c_cancel = st.columns(2)
-            with c_ok:
-                guardar = st.form_submit_button("Guardar abono", type="primary")
-            with c_cancel:
-                cancelar = st.form_submit_button("Cancelar")
-            if guardar:
-                registrar_pago_prestamo(p["id"], monto_ab, str(fecha_ab), notas_ab)
-                st.session_state.pop(f"abonando_{p['id']}", None)
-                st.success("✅ Abono registrado.")
-                st.rerun()
-            if cancelar:
-                st.session_state.pop(f"abonando_{p['id']}", None)
-                st.rerun()
-
-    if st.session_state.get(f"confirmando_eliminar_{p['id']}"):
-        st.warning(
-            f"¿Eliminar este préstamo de **${p['monto_original']:,.2f}**? "
-            "Esta acción no se puede deshacer."
+        st.markdown(f"**\${monto_pagado:,.2f}**")
+        st.caption("Pagado")
+    with col_e:
+        st.markdown(
+            f"<span style='color:{color_resta};font-weight:600'>"
+            f"\${p['monto_pendiente']:,.2f}</span>",
+            unsafe_allow_html=True,
         )
-        c_si, c_no = st.columns(2)
-        with c_si:
-            if st.button("Sí, eliminar", key=f"confirmar_del_{p['id']}", type="primary"):
-                eliminar_prestamo(p["id"])
-                st.session_state.pop(f"confirmando_eliminar_{p['id']}", None)
-                for k in ("dg_gasto_sel", "dg_tipo_persona", "dg_nombre_ext",
-                          "dg_modo_monto", "dg_pct", "dg_monto_fijo", "dg_tipo_pago"):
-                    st.session_state.pop(k, None)
-                st.cache_data.clear()
-                st.success("Préstamo eliminado.")
+        st.caption("Resta")
+    with col_f:
+        st.markdown(
+            f"<div style='background:#eee;border-radius:4px;height:8px;margin-top:10px'>"
+            f"<div style='background:{color_bar};width:{min(progreso,1)*100:.0f}%;"
+            f"height:8px;border-radius:4px'></div></div>"
+            f"<span style='font-size:11px;color:gray'>{progreso*100:.0f}% pagado</span>",
+            unsafe_allow_html=True,
+        )
+    with col_g:
+        if puede_abonar and p["estado"] == "pendiente":
+            if st.button("💸 Abonar", key=f"abn_btn_{p['id']}"):
+                st.session_state[f"abonando_{p['id']}"] = not st.session_state.get(f"abonando_{p['id']}", False)
                 st.rerun()
-        with c_no:
-            if st.button("Cancelar", key=f"cancelar_del_{p['id']}"):
-                st.session_state.pop(f"confirmando_eliminar_{p['id']}", None)
+        if monto_pagado == 0:
+            if st.button("🗑", key=f"del_{p['id']}", help="Eliminar préstamo"):
+                st.session_state[f"confirmando_del_{p['id']}"] = True
+
+    # ── Detalle expandible ──
+    pagos = obtener_pagos_prestamo(p["id"])
+    with st.expander(f"Detalle · {len(pagos)} abono(s) registrado(s)"):
+        if p.get("tipo_pago") == "msi" and p.get("meses_msi") and p.get("monto_por_mes"):
+            _calendario_msi(p, pagos)
+            st.divider()
+        if pagos:
+            st.markdown("**Abonos registrados:**")
+            for pg in pagos:
+                tipo_ico = {"pago": "", "adelantado": " 🔼", "condonado": " ✦"}.get(pg.get("tipo", "pago"), "")
+                mes_lbl  = f" · mes {pg['numero_mes']}" if pg.get("numero_mes") else ""
+                notas_lbl = f"  ·  📝 {pg['notas']}" if pg.get("notas") else ""
+                st.markdown(
+                    f"<div style='display:flex;justify-content:space-between;"
+                    f"padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:13px'>"
+                    f"<span>{pg['fecha']}{mes_lbl}{tipo_ico}{notas_lbl}</span>"
+                    f"<span style='color:#639922;font-weight:500'>\${pg['monto']:,.2f}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("Sin abonos registrados aún.")
+
+    # ── Formulario de abono ──
+    if st.session_state.get(f"abonando_{p['id']}"):
+        _form_abono(p, pagos)
+
+    # ── Confirmación de borrado ──
+    if st.session_state.get(f"confirmando_del_{p['id']}"):
+        st.warning(f"¿Eliminar el préstamo de **\${p['monto_original']:,.2f}**? Esta acción no se puede deshacer.")
+        cx, cy = st.columns(2)
+        with cx:
+            if st.button("Sí, eliminar", key=f"si_del_{p['id']}", type="primary"):
+                eliminar_prestamo(p["id"])
+                st.session_state.pop(f"confirmando_del_{p['id']}", None)
+                st.rerun()
+        with cy:
+            if st.button("Cancelar", key=f"no_del_{p['id']}"):
+                st.session_state.pop(f"confirmando_del_{p['id']}", None)
                 st.rerun()
 
     st.divider()
 
 
-# ── Desde un gasto ───────────────────────────────────────────────────────
+# ── Calendario MSI ───────────────────────────────────────────────────────────
 
-def _render_desde_gasto(usuario_activo: dict, otro_usuario: dict, usuarios: list):
-    st.markdown("#### Crear préstamo desde un gasto existente")
-    st.caption(
-        "Selecciona un gasto que alguien más te va a apoyar a pagar. "
-        "Se creará un préstamo vinculado a ese gasto."
-    )
+def _calendario_msi(p: dict, pagos: list):
+    fecha_inicio  = date.fromisoformat(p["fecha"])
+    meses         = p["meses_msi"]
+    monto_mes     = p.get("monto_por_mes", 0.0)
 
-    # ── Filtros fuera del form ─────────────────────────────────────────
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        filtro_u = st.selectbox(
-            "Gastos de", ["Todos"] + [u["nombre"] for u in usuarios],
-            key="dg_usuario"
-        )
-    with col_f2:
-        hoy = date.today()
-        meses = []
-        for i in range(6):
-            mes = hoy.month - i; anio = hoy.year
-            while mes <= 0: mes += 12; anio -= 1
-            meses.append(date(anio, mes, 1))
-        mes_labels = [f"{MESES_ES[m.month]} {m.year}" for m in meses]
-        mes_sel   = st.selectbox("Mes", ["Todos los meses"] + mes_labels, key="dg_mes")
-    with col_f3:
-        st.markdown("<div style='margin-top:1.8rem'></div>", unsafe_allow_html=True)
-        st.caption("Solo gastos sin préstamo asignado")
+    meses_pagados    = {pg["numero_mes"] for pg in pagos if pg.get("numero_mes")}
+    meses_condonados = {pg["numero_mes"] for pg in pagos
+                        if pg.get("numero_mes") and pg.get("tipo") == "condonado"}
 
-    uid_f = None if filtro_u == "Todos" else next(u["id"] for u in usuarios if u["nombre"] == filtro_u)
-    desde_f = hasta_f = None
-    if mes_sel != "Todos los meses":
-        mes_fecha = meses[mes_labels.index(mes_sel)]
-        import calendar as _cal
-        ultimo = _cal.monthrange(mes_fecha.year, mes_fecha.month)[1]
-        desde_f = mes_fecha.strftime("%Y-%m-01")
-        hasta_f = f"{mes_fecha.year}-{mes_fecha.month:02d}-{ultimo:02d}"
+    st.markdown("**Calendario de pagos MSI:**")
+    cols_per_row = 4
+    for row_start in range(0, meses, cols_per_row):
+        row_nums = list(range(row_start + 1, min(row_start + cols_per_row + 1, meses + 1)))
+        cols = st.columns(len(row_nums))
+        for col, n in zip(cols, row_nums):
+            fecha_n = _fecha_mas_n_meses(fecha_inicio, n - 1)
+            lbl_fecha = fecha_n.strftime("%b %Y")
+            with col:
+                if n in meses_condonados:
+                    bg, txt, sub = "#FFF3CD", "#856404", "✦ Condonado"
+                elif n in meses_pagados:
+                    bg, txt, sub = "#EAF3DE", "#27500A", "✓ Pagado"
+                else:
+                    bg, txt, sub = "#F8F7F4", "#E24B4A", f"${monto_mes:,.0f}"
+                st.markdown(
+                    f"<div style='text-align:center;background:{bg};"
+                    f"border-radius:8px;padding:6px 4px;margin:2px'>"
+                    f"<div style='font-size:11px;color:gray'>Mes {n}</div>"
+                    f"<div style='font-size:12px;font-weight:500'>{lbl_fecha}</div>"
+                    f"<div style='font-size:11px;color:{txt}'>{sub}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
 
-    gastos = obtener_transacciones_para_prestamo(
-        usuario_id=uid_f, desde=desde_f, hasta=hasta_f
-    )
 
-    if not gastos:
-        st.info("No hay gastos disponibles con estos filtros (o todos ya tienen préstamo asignado).")
-        return
+# ── Formulario de abono ──────────────────────────────────────────────────────
 
-    # ── Selector del gasto ─────────────────────────────────────────────
-    opciones_gasto = {
-        f"{g['fecha']}  ·  {g['descripcion']}  ·  ${g['monto']:,.2f}"
-        f"  ({g['usuario_nombre']})": g["id"]
-        for g in gastos
-    }
-    gasto_sel_label = st.selectbox("Selecciona el gasto", list(opciones_gasto.keys()),
-                                   key="dg_gasto_sel")
-    gasto_sel = next(g for g in gastos if g["id"] == opciones_gasto[gasto_sel_label])
+def _form_abono(p: dict, pagos_existentes: list):
+    meses_msi     = p.get("meses_msi", 0)
+    meses_pagados = {pg["numero_mes"] for pg in pagos_existentes if pg.get("numero_mes")}
 
-    # Mostrar detalle del gasto seleccionado
-    medio = gasto_sel.get("tarjeta_nombre") or gasto_sel.get("cuenta_nombre") or "—"
-    if gasto_sel.get("tarjeta_banco"):
-        medio = f"{gasto_sel['tarjeta_nombre']} ({gasto_sel['tarjeta_banco']})"
-    st.markdown(
-        f"<div style='background:var(--color-background-secondary);"
-        f"border-left:3px solid #378ADD;border-radius:0 8px 8px 0;"
-        f"padding:0.7rem 1rem;margin:4px 0 12px'>"
-        f"🧾 <strong>{gasto_sel['descripcion']}</strong>  ·  "
-        f"<strong>${gasto_sel['monto']:,.2f}</strong>  ·  {gasto_sel['fecha']}  ·  {medio}"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    with st.form(f"form_abono_{p['id']}", clear_on_submit=True):
+        st.markdown(f"**Registrar abono** — pendiente: \${p['monto_pendiente']:,.2f}")
 
-    # ── Quién ayuda y cuánto ─────────────────────────────────────────────
-    # Widgets condicionales FUERA del form
-    col_q1, col_q2 = st.columns(2)
-    with col_q1:
-        tipo_persona = st.radio(
-            "¿Quién te apoya?",
-            ["Mi pareja", "Persona externa"],
-            horizontal=True, key="dg_tipo_persona"
-        )
-    with col_q2:
-        if tipo_persona == "Persona externa":
-            nombre_ext = st.text_input("Nombre", placeholder="Ej: Mamá, Carlos",
-                                       key="dg_nombre_ext")
-        else:
-            nombre_ext = None
-
-    modo_monto = st.radio(
-        "Monto del apoyo",
-        ["La mitad", "Porcentaje", "Monto fijo"],
-        horizontal=True, key="dg_modo_monto"
-    )
-
-    monto_gasto = float(gasto_sel["monto"])
-    if modo_monto == "La mitad":
-        monto_apoyo = round(monto_gasto / 2, 2)
-        st.caption(f"→ {tipo_persona if tipo_persona == 'Mi pareja' else nombre_ext or 'Persona externa'}"
-                   f" te debe **${monto_apoyo:,.2f}**")
-    elif modo_monto == "Porcentaje":
-        pct = st.slider("Porcentaje (%)", 1, 100, 50, 1, key="dg_pct")
-        monto_apoyo = round(monto_gasto * pct / 100, 2)
-        st.caption(f"→ {pct}% de \${monto_gasto:,.2f} = **${monto_apoyo:,.2f}**")
-    else:
-        monto_apoyo = st.number_input(
-            "Monto que te deben ($)", min_value=0.01,
-            max_value=float(monto_gasto),
-            value=round(monto_gasto / 2, 2),
-            step=10.0, format="%.2f", key="dg_monto_fijo"
-        )
-
-    tipo_pago = st.radio(
-        "¿Cómo te van a pagar?",
-        ["Un solo pago", "Pagos parciales (abonos)"],
-        horizontal=True, key="dg_tipo_pago"
-    )
-
-    # ── Resto en form ─────────────────────────────────────────────────
-    fecha_prestamo = date.fromisoformat(gasto_sel["fecha"])
-
-    with st.form("form_desde_gasto", clear_on_submit=True):
-        st.caption(f"📅 Fecha del préstamo: **{gasto_sel['fecha']}** (igual que el gasto)")
-        fecha_est = None
-        if tipo_pago == "Un solo pago":
-            fecha_est = st.date_input(
-                "Fecha estimada de pago",
-                value=date.today().replace(month=date.today().month % 12 + 1)
-                if date.today().month < 12
-                else date.today().replace(year=date.today().year + 1, month=1),
+        c1, c2 = st.columns(2)
+        with c1:
+            valor_default = float(p.get("monto_por_mes") or p["monto_pendiente"])
+            monto_ab = st.number_input(
+                "Monto ($)", min_value=0.01,
+                value=valor_default,
+                step=50.0, format="%.2f",
             )
-        else:
-            st.caption("Los abonos se registran desde la tab Pendientes.")
+        with c2:
+            fecha_ab = st.date_input("Fecha", value=date.today())
 
-        notas_p = st.text_input(
-            "Notas (opcional)",
-            value=f"Apoyo en: {gasto_sel['descripcion']}",
-            placeholder="Descripción del préstamo"
+        c3, c4 = st.columns(2)
+        with c3:
+            tipo_ab = st.selectbox(
+                "Tipo de pago",
+                ["Pago normal", "Pago adelantado", "Pago condonado"],
+                help="'Condonado' cancela esa parte de la deuda sin cobro real",
+            )
+        with c4:
+            numero_mes = None
+            if meses_msi > 0:
+                disponibles = [m for m in range(1, meses_msi + 1) if m not in meses_pagados]
+                if disponibles:
+                    numero_mes = st.selectbox("Mes MSI", disponibles)
+                else:
+                    st.caption("Todos los meses están cubiertos.")
+
+        notas_ab = st.text_input("Notas (opcional)")
+
+        c_ok, c_cancel = st.columns(2)
+        with c_ok:
+            guardar  = st.form_submit_button("Guardar abono", type="primary")
+        with c_cancel:
+            cancelar = st.form_submit_button("Cancelar")
+
+    tipo_db_map = {"Pago normal": "pago", "Pago adelantado": "adelantado", "Pago condonado": "condonado"}
+
+    if guardar:
+        registrar_pago_prestamo(
+            prestamo_id=p["id"],
+            monto=monto_ab,
+            fecha=str(fecha_ab),
+            notas=notas_ab,
+            tipo=tipo_db_map[tipo_ab],
+            numero_mes=numero_mes,
         )
-
-        enviado = st.form_submit_button("Crear préstamo", type="primary")
-
-    if enviado:
-        if tipo_persona == "Persona externa" and not (nombre_ext or "").strip():
-            st.error("Escribe el nombre de la persona externa.")
-            return
-
-        acreedor_id = usuario_activo["id"]
-        deudor_id   = otro_usuario["id"] if tipo_persona == "Mi pareja" else None
-        nombre_externo = (nombre_ext or "").strip() or None
-
-        crear_prestamo(
-            monto=float(monto_apoyo),
-            fecha=str(fecha_prestamo),
-            acreedor_id=acreedor_id,
-            deudor_id=deudor_id,
-            nombre_externo=nombre_externo,
-            notas=notas_p.strip(),
-            transaccion_id=gasto_sel["id"],
-            fecha_estimada_pago=str(fecha_est) if fecha_est else None,
-        )
-        for k in ("dg_usuario", "dg_mes", "dg_gasto_sel", "dg_tipo_persona",
-                  "dg_nombre_ext", "dg_modo_monto", "dg_pct", "dg_monto_fijo",
-                  "dg_tipo_pago"):
-            st.session_state.pop(k, None)
-        st.success(
-            f"✅ Préstamo creado: "
-            f"{'Mi pareja' if tipo_persona == 'Mi pareja' else nombre_ext} "
-            f"te debe ${monto_apoyo:,.2f} por {gasto_sel['descripcion']}."
-        )
+        st.session_state.pop(f"abonando_{p['id']}", None)
+        st.success("✅ Abono registrado.")
+        st.rerun()
+    if cancelar:
+        st.session_state.pop(f"abonando_{p['id']}", None)
         st.rerun()
 
 
-# ── Nuevo manual ──────────────────────────────────────────────────────────
+# ── Crear préstamo desde transacción (llamado desde transacciones.py) ────────
 
-def _render_nuevo_manual(usuario_activo: dict, otro_usuario: dict, usuarios: list):
-    st.markdown("#### Registrar préstamo manual")
-    st.caption("Para préstamos que no están vinculados a un gasto específico.")
+def seccion_nuevo_prestamo(usuario_activo: dict, usuarios: list):
+    """
+    Panel para crear un préstamo ligado a la transacción recién guardada.
+    Se muestra cuando st.session_state['prest_pendiente'] está definido.
+    """
+    info = st.session_state.get("prest_pendiente", {})
+    if not info:
+        return
 
-    tipo_prestamo = st.radio(
-        "Tipo de préstamo",
-        ["Entre nosotros", "Con persona externa"],
-        horizontal=True, label_visibility="collapsed",
-        key="nm_tipo",
+    tx_monto = info["monto"]
+    tx_desc  = info["descripcion"]
+    tx_fecha = info["fecha"]
+    tx_msi   = info.get("meses_sin_intereses", 0)
+    tx_id    = info["tx_id"]
+
+    otros = [u for u in usuarios if u["id"] != usuario_activo["id"]]
+
+    st.success(f"✅ Transacción guardada: **{tx_desc}** — \${tx_monto:,.2f}")
+    st.markdown("##### 💸 Configurar préstamo")
+
+    # ¿Quién ayuda?
+    c1, c2 = st.columns(2)
+    with c1:
+        tipo_persona = st.radio(
+            "¿Con quién es el préstamo?",
+            ["Mi pareja", "Persona externa"],
+            horizontal=True, key="np_tipo_persona",
+        )
+    with c2:
+        nombre_ext = None
+        if tipo_persona == "Persona externa":
+            nombre_ext = st.text_input("Nombre", key="np_nombre_ext",
+                                       placeholder="Ej: Edgar, Mamá")
+
+    # Dirección
+    dir_prestamo = st.radio(
+        "¿Qué pasó?",
+        ["Me van a apoyar a pagar este gasto", "Yo pagué por alguien (me van a pagar)"],
+        key="np_direccion",
     )
 
-    acreedor_id = deudor_id = nombre_externo = None
-    valido = True
+    # Monto del apoyo
+    modo_monto = st.radio(
+        "Monto del apoyo",
+        ["Completo", "La mitad", "Porcentaje", "Monto fijo"],
+        horizontal=True, key="np_modo_monto",
+    )
 
-    if tipo_prestamo == "Entre nosotros":
-        opts = [
-            f"{usuario_activo['nombre']} le prestó a {otro_usuario['nombre']}",
-            f"{otro_usuario['nombre']} le prestó a {usuario_activo['nombre']}",
-        ]
-        direccion = st.radio("Dirección", opts,
-                             label_visibility="collapsed", key="nm_dir")
-        if direccion.startswith(usuario_activo["nombre"]):
-            acreedor_id, deudor_id = usuario_activo["id"], otro_usuario["id"]
-        else:
-            acreedor_id, deudor_id = otro_usuario["id"], usuario_activo["id"]
+    if modo_monto == "Completo":
+        monto_prestamo = tx_monto
+        st.caption(f"→ Monto total: **\${monto_prestamo:,.2f}**")
+    elif modo_monto == "La mitad":
+        monto_prestamo = round(tx_monto / 2, 2)
+        st.caption(f"→ La mitad de \${tx_monto:,.2f} = **\${monto_prestamo:,.2f}**")
+    elif modo_monto == "Porcentaje":
+        pct = st.slider("Porcentaje (%)", 1, 100, 50, key="np_pct")
+        monto_prestamo = round(tx_monto * pct / 100, 2)
+        st.caption(f"→ {pct}% de \${tx_monto:,.2f} = **\${monto_prestamo:,.2f}**")
     else:
-        c1, c2 = st.columns(2)
-        with c1:
-            nombre_externo = st.text_input(
-                "Nombre de la persona",
-                placeholder="Ej: Mamá, Carlos Vecino",
-                key="nm_externo",
-            )
-        with c2:
-            rol = st.selectbox(
-                f"Rol de {usuario_activo['nombre']}",
-                ["Yo presté (soy acreedor)", "Me prestaron (soy deudor)"],
-                key="nm_rol",
-            )
-        if not (nombre_externo or "").strip():
-            valido = False
-        acreedor_id = usuario_activo["id"] if "acreedor" in rol else None
-        deudor_id   = None if "acreedor" in rol else usuario_activo["id"]
+        monto_prestamo = st.number_input(
+            "Monto del préstamo ($)", min_value=0.01,
+            value=round(tx_monto / 2, 2),
+            step=10.0, format="%.2f", key="np_monto_fijo",
+        )
 
-    tipo_pago = st.radio(
-        "¿Cómo se va a pagar?",
-        ["Un solo pago", "Pagos parciales (abonos)"],
-        horizontal=True, key="nm_tipo_pago"
+    # Forma de pago
+    opciones_pago = ["Un solo pago", "Pagos parciales (abonos)"]
+    if tx_msi > 0:
+        opciones_pago.append(f"Conforme a MSI ({tx_msi} meses)")
+
+    tipo_pago_lbl = st.radio(
+        "¿Cómo van a pagar?",
+        opciones_pago, horizontal=True, key="np_tipo_pago",
     )
 
-    with st.form("form_nuevo_manual", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            monto = st.number_input("Monto ($)", min_value=0.01, step=100.0, format="%.2f")
-        with c2:
-            fecha = st.date_input("Fecha", value=date.today())
+    meses_msi = 0
+    monto_por_mes = None
+    tipo_pago_db  = "unico"
 
-        fecha_est = None
-        if tipo_pago == "Un solo pago":
-            fecha_est = st.date_input(
-                "Fecha estimada de pago",
-                value=date.today().replace(month=date.today().month % 12 + 1)
-                if date.today().month < 12
-                else date.today().replace(year=date.today().year + 1, month=1),
-            )
-        else:
-            st.caption("Los abonos se registran desde la tab Pendientes.")
+    if tipo_pago_lbl == "Un solo pago":
+        tipo_pago_db = "unico"
+    elif tipo_pago_lbl == "Pagos parciales (abonos)":
+        tipo_pago_db = "abonos"
+    else:
+        tipo_pago_db  = "msi"
+        meses_msi     = tx_msi
+        monto_por_mes = round(monto_prestamo / meses_msi, 2)
+        st.caption(f"→ {meses_msi} pagos automáticos de **\${monto_por_mes:,.2f}** cada uno")
 
-        notas = st.text_input("Descripción / motivo",
-                              placeholder="Ej: Para renta de enero")
-        enviado = st.form_submit_button("Guardar préstamo", type="primary")
+    st.markdown("")
+    c_crear, c_saltar = st.columns(2)
+    with c_crear:
+        if st.button("💾 Crear préstamo", type="primary", key="np_crear"):
+            if tipo_persona == "Persona externa" and not (nombre_ext or "").strip():
+                st.error("Escribe el nombre de la persona.")
+                return
 
-    if enviado:
-        if not valido:
-            st.error("Escribe el nombre de la persona.")
-        elif monto <= 0:
-            st.error("El monto debe ser mayor a cero.")
-        else:
+            otro = otros[0] if otros else None
+            es_pareja = tipo_persona == "Mi pareja"
+            nombre_e  = None if es_pareja else (nombre_ext or "").strip() or None
+
+            if "Me van a apoyar" in dir_prestamo:
+                acreedor_id = otro["id"] if (es_pareja and otro) else None
+                deudor_id   = usuario_activo["id"]
+            else:
+                acreedor_id = usuario_activo["id"]
+                deudor_id   = otro["id"] if (es_pareja and otro) else None
+
             crear_prestamo(
-                monto=monto, fecha=str(fecha),
-                acreedor_id=acreedor_id, deudor_id=deudor_id,
-                nombre_externo=(nombre_externo or "").strip() or None,
-                notas=notas.strip(),
-                fecha_estimada_pago=str(fecha_est) if fecha_est else None,
+                monto=monto_prestamo,
+                fecha=tx_fecha,
+                acreedor_id=acreedor_id,
+                deudor_id=deudor_id,
+                nombre_externo=nombre_e,
+                notas=tx_desc,
+                transaccion_id=tx_id,
+                tipo_pago=tipo_pago_db,
+                meses_msi=meses_msi if meses_msi > 0 else None,
+                monto_por_mes=monto_por_mes,
             )
-            for k in ("nm_tipo", "nm_dir", "nm_externo", "nm_rol", "nm_tipo_pago"):
-                st.session_state.pop(k, None)
-            st.success(f"✅ Préstamo de ${monto:,.2f} registrado.")
+            _limpiar_np()
+            st.session_state.pop("prest_pendiente", None)
+            st.success("✅ Préstamo creado.")
             st.rerun()
+
+    with c_saltar:
+        if st.button("Saltar (sin préstamo)", key="np_saltar"):
+            _limpiar_np()
+            st.session_state.pop("prest_pendiente", None)
+            st.rerun()
+
+
+def _limpiar_np():
+    for k in ("np_tipo_persona", "np_nombre_ext", "np_direccion",
+              "np_modo_monto", "np_pct", "np_monto_fijo", "np_tipo_pago"):
+        st.session_state.pop(k, None)
