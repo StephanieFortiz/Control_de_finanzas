@@ -168,7 +168,7 @@ def _render_prestamo(p: dict, usuario_activo: dict, direccion: str, puede_abonar
                     f"<div style='display:flex;justify-content:space-between;"
                     f"padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:13px'>"
                     f"<span>{pg['fecha']}{mes_lbl}{tipo_ico}{notas_lbl}</span>"
-                    f"<span style='color:#639922;font-weight:500'>\${pg['monto']:,.2f}</span>"
+                    f"<span style='color:#639922;font-weight:500'>${pg['monto']:,.2f}</span>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
