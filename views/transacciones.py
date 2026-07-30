@@ -387,7 +387,7 @@ def render():
 def _mini_form_abono(prest: dict, form_key: str):
     """Mini formulario inline de abono para la vista de transacciones."""
     pagos = obtener_pagos_prestamo(prest["id"])
-    meses_msi     = prest.get("meses_msi", 0)
+    meses_msi     = prest.get("meses_msi") or 0
     meses_pagados = {pg["numero_mes"] for pg in pagos if pg.get("numero_mes")}
 
     with st.form(f"mini_abono_{prest['id']}", clear_on_submit=True):

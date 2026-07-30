@@ -262,7 +262,7 @@ def _fila_transaccion(t: dict, ajustes: dict = None, prestamos_tx: dict = None,
 
 def _mini_form_abono_tar(prest: dict, form_key: str):
     pagos = obtener_pagos_prestamo(prest["id"])
-    meses_msi     = prest.get("meses_msi", 0)
+    meses_msi     = prest.get("meses_msi") or 0
     meses_pagados = {pg["numero_mes"] for pg in pagos if pg.get("numero_mes")}
 
     with st.form(f"mini_abono_tar_{form_key}", clear_on_submit=True):

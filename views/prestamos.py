@@ -236,7 +236,7 @@ def _calendario_msi(p: dict, pagos: list):
 # ── Formulario de abono ──────────────────────────────────────────────────────
 
 def _form_abono(p: dict, pagos_existentes: list):
-    meses_msi     = p.get("meses_msi", 0)
+    meses_msi     = p.get("meses_msi") or 0
     meses_pagados = {pg["numero_mes"] for pg in pagos_existentes if pg.get("numero_mes")}
 
     with st.form(f"form_abono_{p['id']}", clear_on_submit=True):
