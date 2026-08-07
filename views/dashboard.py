@@ -4,9 +4,10 @@ views/dashboard.py
 Dashboard principal. Flujo de lo general a lo particular:
   1. Métricas resumen (ingresos, gastos, ahorro)
   2. Estado de tarjetas (gauges de uso)
-  3. Gastos por categoría (dona + detalle desplegable)
-  4. Tendencia de gastos en el período (barras diarias + acumulado)
-  5. Análisis por tarjeta (uso por transacciones + categoría por tarjeta)
+  3. Análisis por tarjeta (uso por transacciones + categoría por tarjeta)
+  4. Gastos por categoría (barra + detalle desplegable)
+  5. Promedio mensual de gasto por categoría (año a la fecha)
+  6. Gastos por categoría y mes (año actual, barras apiladas)
 """
 
 import streamlit as st
@@ -230,7 +231,92 @@ def render():
         gastos_filtrados = gastos_tx
         ids_filtradas    = set()
 
-    # ── 3. Gastos por categoría ──────────────────────────────────────────────
+    # ── 3. Análisis por tarjeta ───────────────────────────────────────────────
+    if tarjetas_en_periodo:
+        st.markdown("##### 🃏 Análisis por tarjeta")
+
+        # 3a. Uso por número de transacciones
+        col_uso, col_space = st.columns([1, 1])
+        with col_uso:
+            conteo: dict[str, int] = defaultdict(int)
+            for t in gastos_filtrados:
+                if not t.get("es_proyeccion") and t.get("tarjeta_id"):
+                    conteo[t.get("tarjeta_nombre") or str(t["tarjeta_id"])] += 1
+
+            nombres_t  = sorted(conteo, key=lambda k: conteo[k], reverse=True)
+            valores_t  = [conteo[n] for n in nombres_t]
+            colores_t  = ["#378ADD", "#EF9F27", "#639922", "#E24B4A",
+                          "#9B59B6", "#1ABC9C", "#E67E22", "#2ECC71"]
+
+            fig_uso = go.Figure(go.Pie(
+                labels=nombres_t, values=valores_t,
+                marker=dict(colors=colores_t[:len(nombres_t)]),
+                textinfo="label+value",
+                hovertemplate="<b>%{label}</b><br>%{value} cargos (%{percent})<extra></extra>",
+            ))
+            fig_uso.update_layout(
+                title=dict(text="Cargos por tarjeta", font_size=14),
+                height=280,
+                margin=dict(t=45, b=10, l=0, r=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+            )
+            st.plotly_chart(fig_uso, use_container_width=True)
+
+        st.divider()
+
+        # 3b. Gastos por categoría — barras agrupadas por tarjeta
+        st.markdown("###### Gastos por categoría en cada tarjeta")
+
+        # Todas las categorías presentes en las tarjetas filtradas
+        cat_totales_5b: dict[str, float] = defaultdict(float)
+        for t in gastos_filtrados:
+            if t.get("tarjeta_id") in ids_filtradas:
+                cat_totales_5b[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
+
+        # Ascending → el mayor queda arriba en la barra horizontal
+        cats_5b = sorted(cat_totales_5b.keys(), key=lambda c: cat_totales_5b[c])
+
+        card_colors_5b = ["#378ADD", "#EF9F27", "#639922", "#E24B4A", "#9B59B6", "#1ABC9C"]
+        fig_group = go.Figure()
+
+        for i, (tid, tnombre) in enumerate(tarjetas_en_periodo.items()):
+            if tid not in ids_filtradas:
+                continue
+            cat_m: dict[str, float] = defaultdict(float)
+            for t in gastos_filtrados:
+                if t.get("tarjeta_id") == tid:
+                    cat_m[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
+
+            fig_group.add_trace(go.Bar(
+                name=tnombre,
+                y=cats_5b,
+                x=[cat_m.get(c, 0.0) for c in cats_5b],
+                orientation="h",
+                marker_color=card_colors_5b[i % len(card_colors_5b)],
+                text=[f"${cat_m[c]:,.0f}" if cat_m.get(c, 0) > 0 else "" for c in cats_5b],
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>%{fullData.name}: $%{x:,.2f}<extra></extra>",
+            ))
+
+        n_cats_5b  = len(cats_5b)
+        n_cards_5b = sum(1 for tid in tarjetas_en_periodo if tid in ids_filtradas)
+        fig_group.update_layout(
+            barmode="group",
+            height=max(280, n_cats_5b * 32 * max(n_cards_5b, 1) + 80),
+            margin=dict(t=10, b=10, l=0, r=100),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
+            yaxis=dict(showgrid=False),
+            legend=dict(orientation="h", y=1.04, x=0, bgcolor="rgba(0,0,0,0)"),
+            hovermode="y unified",
+        )
+        st.plotly_chart(fig_group, use_container_width=True)
+
+        st.divider()
+
+    # ── 4. Gastos por categoría ──────────────────────────────────────────────
     st.markdown("##### 📂 Gastos por categoría")
 
     cat_data: dict[str, dict] = defaultdict(
@@ -295,8 +381,8 @@ def render():
 
     st.divider()
 
-    # ── 4. Tendencia semanal (año a la fecha) ────────────────────────────────
-    st.markdown("##### 📈 Gasto mensual — año a la fecha")
+    # ── 5. Promedio mensual de gasto por categoría (año a la fecha) ──────────
+    st.markdown("##### 📐 Promedio mensual de gasto por categoría — " + str(hoy.year))
 
     desde_ytd = f"{hoy.year}-01-01"
     hasta_ytd = hoy.isoformat()
@@ -312,141 +398,6 @@ def render():
         )
     gastos_ytd = [t for t in txs_ytd if t["tipo"] == "gasto"]
 
-    gastos_por_mes: dict[str, float] = defaultdict(float)
-    for t in gastos_ytd:
-        mes_key = t["fecha"][:7]  # "YYYY-MM"
-        gastos_por_mes[mes_key] += _monto_efectivo(t)
-
-    meses_ord  = sorted(gastos_por_mes)
-    montos_mes = [gastos_por_mes[m] for m in meses_ord]
-    acum_sem: list[float] = []
-    acc = 0.0
-    for m in montos_mes:
-        acc += m
-        acum_sem.append(round(acc, 2))
-
-    labels_sem = [
-        MESES_ES[int(m[5:7])] + " " + m[:4] for m in meses_ord
-    ]
-
-    fig_trend = go.Figure()
-    fig_trend.add_trace(go.Bar(
-        x=labels_sem, y=montos_mes,
-        name="Gasto mensual",
-        marker_color="#378ADD",
-        opacity=0.65,
-        hovertemplate="<b>%{x}</b><br>$%{y:,.2f}<extra></extra>",
-    ))
-    fig_trend.add_trace(go.Scatter(
-        x=labels_sem, y=acum_sem,
-        name="Acumulado",
-        line=dict(color="#E24B4A", width=2.5),
-        mode="lines+markers",
-        marker=dict(size=5, color="#E24B4A"),
-        yaxis="y2",
-        hovertemplate="<b>%{x}</b><br>Acum: $%{y:,.2f}<extra></extra>",
-    ))
-    fig_trend.update_layout(
-        height=300,
-        margin=dict(t=10, b=10, l=0, r=70),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=False, tickangle=-40),
-        yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$", title="Mensual"),
-        yaxis2=dict(overlaying="y", side="right", showgrid=False, tickprefix="$", title="Acumulado"),
-        legend=dict(orientation="h", y=1.08, x=0, bgcolor="rgba(0,0,0,0)"),
-        hovermode="x unified",
-    )
-    st.plotly_chart(fig_trend, use_container_width=True)
-
-    # ── 5. Análisis por tarjeta ───────────────────────────────────────────────
-    if tarjetas_en_periodo:
-        st.divider()
-        st.markdown("##### 🃏 Análisis por tarjeta")
-
-        # 5a. Uso por número de transacciones
-        col_uso, col_space = st.columns([1, 1])
-        with col_uso:
-            conteo: dict[str, int] = defaultdict(int)
-            for t in gastos_filtrados:
-                if not t.get("es_proyeccion") and t.get("tarjeta_id"):
-                    conteo[t.get("tarjeta_nombre") or str(t["tarjeta_id"])] += 1
-
-            nombres_t  = sorted(conteo, key=lambda k: conteo[k], reverse=True)
-            valores_t  = [conteo[n] for n in nombres_t]
-            colores_t  = ["#378ADD", "#EF9F27", "#639922", "#E24B4A",
-                          "#9B59B6", "#1ABC9C", "#E67E22", "#2ECC71"]
-
-            fig_uso = go.Figure(go.Pie(
-                labels=nombres_t, values=valores_t,
-                marker=dict(colors=colores_t[:len(nombres_t)]),
-                textinfo="label+value",
-                hovertemplate="<b>%{label}</b><br>%{value} cargos (%{percent})<extra></extra>",
-            ))
-            fig_uso.update_layout(
-                title=dict(text="Cargos por tarjeta", font_size=14),
-                height=280,
-                margin=dict(t=45, b=10, l=0, r=0),
-                paper_bgcolor="rgba(0,0,0,0)",
-                showlegend=False,
-            )
-            st.plotly_chart(fig_uso, use_container_width=True)
-
-        st.divider()
-
-        # 5b. Gastos por categoría — barras agrupadas por tarjeta
-        st.markdown("###### Gastos por categoría en cada tarjeta")
-
-        # Todas las categorías presentes en las tarjetas filtradas
-        cat_totales_5b: dict[str, float] = defaultdict(float)
-        for t in gastos_filtrados:
-            if t.get("tarjeta_id") in ids_filtradas:
-                cat_totales_5b[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
-
-        # Ascending → el mayor queda arriba en la barra horizontal
-        cats_5b = sorted(cat_totales_5b.keys(), key=lambda c: cat_totales_5b[c])
-
-        card_colors_5b = ["#378ADD", "#EF9F27", "#639922", "#E24B4A", "#9B59B6", "#1ABC9C"]
-        fig_group = go.Figure()
-
-        for i, (tid, tnombre) in enumerate(tarjetas_en_periodo.items()):
-            if tid not in ids_filtradas:
-                continue
-            cat_m: dict[str, float] = defaultdict(float)
-            for t in gastos_filtrados:
-                if t.get("tarjeta_id") == tid:
-                    cat_m[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
-
-            fig_group.add_trace(go.Bar(
-                name=tnombre,
-                y=cats_5b,
-                x=[cat_m.get(c, 0.0) for c in cats_5b],
-                orientation="h",
-                marker_color=card_colors_5b[i % len(card_colors_5b)],
-                text=[f"${cat_m[c]:,.0f}" if cat_m.get(c, 0) > 0 else "" for c in cats_5b],
-                textposition="outside",
-                hovertemplate="<b>%{y}</b><br>%{fullData.name}: $%{x:,.2f}<extra></extra>",
-            ))
-
-        n_cats_5b  = len(cats_5b)
-        n_cards_5b = sum(1 for tid in tarjetas_en_periodo if tid in ids_filtradas)
-        fig_group.update_layout(
-            barmode="group",
-            height=max(280, n_cats_5b * 32 * max(n_cards_5b, 1) + 80),
-            margin=dict(t=10, b=10, l=0, r=100),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
-            yaxis=dict(showgrid=False),
-            legend=dict(orientation="h", y=1.04, x=0, bgcolor="rgba(0,0,0,0)"),
-            hovermode="y unified",
-        )
-        st.plotly_chart(fig_group, use_container_width=True)
-
-    # ── 6. Promedio mensual de gasto por categoría (año a la fecha) ──────────
-    st.divider()
-    st.markdown("##### 📐 Promedio mensual de gasto por categoría — " + str(hoy.year))
-
     cat_total_ytd: dict[str, float] = defaultdict(float)
     cat_color_ytd: dict[str, str] = {}
     for t in gastos_ytd:
@@ -459,8 +410,23 @@ def render():
     else:
         n_meses_ytd = hoy.month  # meses transcurridos, incluye el actual
         cat_prom = {c: total / n_meses_ytd for c, total in cat_total_ytd.items()}
+
+        opciones_cat_prom = sorted(cat_prom)
+        sel_cat_prom = st.multiselect(
+            "Filtrar categorías",
+            options=opciones_cat_prom,
+            default=opciones_cat_prom,
+            key="dash_filtro_cat_prom",
+        )
+        cats_activas = sel_cat_prom or opciones_cat_prom
+
+        suma_prom = sum(cat_prom[c] for c in cats_activas)
+        col_prom_box, _ = st.columns([1, 2])
+        with col_prom_box:
+            st.metric("💰 Promedio mensual total", f"${suma_prom:,.2f}")
+
         # Ascending → el mayor promedio queda arriba en la barra horizontal
-        cats_prom_asc = sorted(cat_prom, key=lambda c: cat_prom[c])
+        cats_prom_asc = sorted(cats_activas, key=lambda c: cat_prom[c])
 
         fig_prom = go.Figure(go.Bar(
             x=[cat_prom[c] for c in cats_prom_asc],
@@ -486,7 +452,7 @@ def render():
         )
         st.plotly_chart(fig_prom, use_container_width=True)
 
-    # ── 7. Gastos por categoría y mes (año actual) ───────────────────────────
+    # ── 6. Gastos por categoría y mes (año actual) ───────────────────────────
     st.divider()
     st.markdown("##### 🗓️ Gastos por categoría y mes — " + str(hoy.year))
 
