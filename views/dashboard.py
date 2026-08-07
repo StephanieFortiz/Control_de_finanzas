@@ -359,92 +359,147 @@ def render():
     )
     st.plotly_chart(fig_trend, use_container_width=True)
 
-    st.divider()
-
     # ── 5. Análisis por tarjeta ───────────────────────────────────────────────
-    if not tarjetas_en_periodo:
-        return
+    if tarjetas_en_periodo:
+        st.divider()
+        st.markdown("##### 🃏 Análisis por tarjeta")
 
-    st.markdown("##### 🃏 Análisis por tarjeta")
+        # 5a. Uso por número de transacciones
+        col_uso, col_space = st.columns([1, 1])
+        with col_uso:
+            conteo: dict[str, int] = defaultdict(int)
+            for t in gastos_filtrados:
+                if not t.get("es_proyeccion") and t.get("tarjeta_id"):
+                    conteo[t.get("tarjeta_nombre") or str(t["tarjeta_id"])] += 1
 
-    # 5a. Uso por número de transacciones
-    col_uso, col_space = st.columns([1, 1])
-    with col_uso:
-        conteo: dict[str, int] = defaultdict(int)
+            nombres_t  = sorted(conteo, key=lambda k: conteo[k], reverse=True)
+            valores_t  = [conteo[n] for n in nombres_t]
+            colores_t  = ["#378ADD", "#EF9F27", "#639922", "#E24B4A",
+                          "#9B59B6", "#1ABC9C", "#E67E22", "#2ECC71"]
+
+            fig_uso = go.Figure(go.Bar(
+                x=nombres_t, y=valores_t,
+                marker_color=colores_t[:len(nombres_t)],
+                text=valores_t, textposition="outside",
+                hovertemplate="<b>%{x}</b><br>%{y} cargos<extra></extra>",
+            ))
+            fig_uso.update_layout(
+                title=dict(text="Cargos por tarjeta", font_size=14),
+                height=280,
+                margin=dict(t=45, b=10, l=0, r=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title="# cargos"),
+                xaxis=dict(showgrid=False),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_uso, use_container_width=True)
+
+        st.divider()
+
+        # 5b. Gastos por categoría — barras agrupadas por tarjeta
+        st.markdown("###### Gastos por categoría en cada tarjeta")
+
+        # Todas las categorías presentes en las tarjetas filtradas
+        cat_totales_5b: dict[str, float] = defaultdict(float)
         for t in gastos_filtrados:
-            if not t.get("es_proyeccion") and t.get("tarjeta_id"):
-                conteo[t.get("tarjeta_nombre") or str(t["tarjeta_id"])] += 1
+            if t.get("tarjeta_id") in ids_filtradas:
+                cat_totales_5b[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
 
-        nombres_t  = sorted(conteo, key=lambda k: conteo[k], reverse=True)
-        valores_t  = [conteo[n] for n in nombres_t]
-        colores_t  = ["#378ADD", "#EF9F27", "#639922", "#E24B4A",
-                      "#9B59B6", "#1ABC9C", "#E67E22", "#2ECC71"]
+        # Ascending → el mayor queda arriba en la barra horizontal
+        cats_5b = sorted(cat_totales_5b.keys(), key=lambda c: cat_totales_5b[c])
 
-        fig_uso = go.Figure(go.Bar(
-            x=nombres_t, y=valores_t,
-            marker_color=colores_t[:len(nombres_t)],
-            text=valores_t, textposition="outside",
-            hovertemplate="<b>%{x}</b><br>%{y} cargos<extra></extra>",
-        ))
-        fig_uso.update_layout(
-            title=dict(text="Cargos por tarjeta", font_size=14),
-            height=280,
-            margin=dict(t=45, b=10, l=0, r=0),
+        card_colors_5b = ["#378ADD", "#EF9F27", "#639922", "#E24B4A", "#9B59B6", "#1ABC9C"]
+        fig_group = go.Figure()
+
+        for i, (tid, tnombre) in enumerate(tarjetas_en_periodo.items()):
+            if tid not in ids_filtradas:
+                continue
+            cat_m: dict[str, float] = defaultdict(float)
+            for t in gastos_filtrados:
+                if t.get("tarjeta_id") == tid:
+                    cat_m[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
+
+            fig_group.add_trace(go.Bar(
+                name=tnombre,
+                y=cats_5b,
+                x=[cat_m.get(c, 0.0) for c in cats_5b],
+                orientation="h",
+                marker_color=card_colors_5b[i % len(card_colors_5b)],
+                text=[f"${cat_m[c]:,.0f}" if cat_m.get(c, 0) > 0 else "" for c in cats_5b],
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>%{fullData.name}: $%{x:,.2f}<extra></extra>",
+            ))
+
+        n_cats_5b  = len(cats_5b)
+        n_cards_5b = sum(1 for tid in tarjetas_en_periodo if tid in ids_filtradas)
+        fig_group.update_layout(
+            barmode="group",
+            height=max(280, n_cats_5b * 32 * max(n_cards_5b, 1) + 80),
+            margin=dict(t=10, b=10, l=0, r=100),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title="# cargos"),
-            xaxis=dict(showgrid=False),
-            showlegend=False,
+            xaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
+            yaxis=dict(showgrid=False),
+            legend=dict(orientation="h", y=1.04, x=0, bgcolor="rgba(0,0,0,0)"),
+            hovermode="y unified",
         )
-        st.plotly_chart(fig_uso, use_container_width=True)
+        st.plotly_chart(fig_group, use_container_width=True)
 
+    # ── 6. Gastos por categoría y mes (año actual) ───────────────────────────
     st.divider()
+    st.markdown("##### 🗓️ Gastos por categoría y mes — " + str(hoy.year))
 
-    # 5b. Gastos por categoría — barras agrupadas por tarjeta
-    st.markdown("###### Gastos por categoría en cada tarjeta")
+    desde_anio = f"{hoy.year}-01-01"
+    hasta_anio = f"{hoy.year}-12-31"
 
-    # Todas las categorías presentes en las tarjetas filtradas
-    cat_totales_5b: dict[str, float] = defaultdict(float)
-    for t in gastos_filtrados:
-        if t.get("tarjeta_id") in ids_filtradas:
-            cat_totales_5b[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
-
-    # Ascending → el mayor queda arriba en la barra horizontal
-    cats_5b = sorted(cat_totales_5b.keys(), key=lambda c: cat_totales_5b[c])
-
-    card_colors_5b = ["#378ADD", "#EF9F27", "#639922", "#E24B4A", "#9B59B6", "#1ABC9C"]
-    fig_group = go.Figure()
-
-    for i, (tid, tnombre) in enumerate(tarjetas_en_periodo.items()):
-        if tid not in ids_filtradas:
-            continue
-        cat_m: dict[str, float] = defaultdict(float)
-        for t in gastos_filtrados:
-            if t.get("tarjeta_id") == tid:
-                cat_m[t.get("categoria_nombre") or "Sin categoría"] += _monto_efectivo(t)
-
-        fig_group.add_trace(go.Bar(
-            name=tnombre,
-            y=cats_5b,
-            x=[cat_m.get(c, 0.0) for c in cats_5b],
-            orientation="h",
-            marker_color=card_colors_5b[i % len(card_colors_5b)],
-            text=[f"${cat_m[c]:,.0f}" if cat_m.get(c, 0) > 0 else "" for c in cats_5b],
-            textposition="outside",
-            hovertemplate="<b>%{y}</b><br>%{fullData.name}: $%{x:,.2f}<extra></extra>",
-        ))
-
-    n_cats_5b  = len(cats_5b)
-    n_cards_5b = sum(1 for tid in tarjetas_en_periodo if tid in ids_filtradas)
-    fig_group.update_layout(
-        barmode="group",
-        height=max(280, n_cats_5b * 32 * max(n_cards_5b, 1) + 80),
-        margin=dict(t=10, b=10, l=0, r=100),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
-        yaxis=dict(showgrid=False),
-        legend=dict(orientation="h", y=1.04, x=0, bgcolor="rgba(0,0,0,0)"),
-        hovermode="y unified",
+    txs_anio = obtener_transacciones(usuario_id=uid, desde=desde_anio, hasta=hasta_anio)
+    txs_msi_anio = obtener_transacciones(
+        usuario_id=uid, desde=desde_amplio, hasta=hasta_anio, tipo="gasto"
     )
-    st.plotly_chart(fig_group, use_container_width=True)
+    txs_msi_anio = [t for t in txs_msi_anio if t.get("meses_sin_intereses", 0) > 0]
+    if txs_msi_anio:
+        txs_anio = inyectar_proyecciones_msi(
+            txs_anio, desde=desde_anio, hasta=hasta_anio, txs_msi_origen=txs_msi_anio
+        )
+    gastos_anio = [t for t in txs_anio if t["tipo"] == "gasto"]
+
+    # Monto por (categoría, mes) + color + orden de aparición
+    cat_mes: dict[str, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    cat_colores: dict[str, str] = {}
+    for t in gastos_anio:
+        cat   = t.get("categoria_nombre") or "Sin categoría"
+        mes_i = int(t["fecha"][5:7])
+        cat_mes[cat][mes_i] += _monto_efectivo(t)
+        cat_colores.setdefault(cat, t.get("categoria_color") or "#888780")
+
+    if not cat_mes:
+        st.caption("Sin gastos registrados en el año.")
+    else:
+        meses_x = [MESES_ES[i][:3] for i in range(1, 13)]
+        # Mayor gasto total primero → orden de leyenda consistente
+        cats_orden = sorted(cat_mes, key=lambda c: sum(cat_mes[c].values()), reverse=True)
+
+        fig_cat_mes = go.Figure()
+        for cat in cats_orden:
+            valores = [cat_mes[cat].get(i, 0.0) for i in range(1, 13)]
+            fig_cat_mes.add_trace(go.Bar(
+                name=cat,
+                x=meses_x,
+                y=valores,
+                marker_color=cat_colores[cat],
+                hovertemplate=f"<b>{cat}</b><br>%{{x}}: $%{{y:,.2f}}<extra></extra>",
+            ))
+
+        fig_cat_mes.update_layout(
+            barmode="group",
+            height=440,
+            margin=dict(t=10, b=10, l=0, r=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
+            legend=dict(orientation="h", y=1.12, x=0, bgcolor="rgba(0,0,0,0)"),
+            hovermode="closest",
+        )
+        st.plotly_chart(fig_cat_mes, use_container_width=True)
