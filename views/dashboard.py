@@ -377,20 +377,17 @@ def render():
             colores_t  = ["#378ADD", "#EF9F27", "#639922", "#E24B4A",
                           "#9B59B6", "#1ABC9C", "#E67E22", "#2ECC71"]
 
-            fig_uso = go.Figure(go.Bar(
-                x=nombres_t, y=valores_t,
-                marker_color=colores_t[:len(nombres_t)],
-                text=valores_t, textposition="outside",
-                hovertemplate="<b>%{x}</b><br>%{y} cargos<extra></extra>",
+            fig_uso = go.Figure(go.Pie(
+                labels=nombres_t, values=valores_t,
+                marker=dict(colors=colores_t[:len(nombres_t)]),
+                textinfo="label+value",
+                hovertemplate="<b>%{label}</b><br>%{value} cargos (%{percent})<extra></extra>",
             ))
             fig_uso.update_layout(
                 title=dict(text="Cargos por tarjeta", font_size=14),
                 height=280,
                 margin=dict(t=45, b=10, l=0, r=0),
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(showgrid=True, gridcolor="#f0f0f0", title="# cargos"),
-                xaxis=dict(showgrid=False),
                 showlegend=False,
             )
             st.plotly_chart(fig_uso, use_container_width=True)
@@ -446,65 +443,7 @@ def render():
         )
         st.plotly_chart(fig_group, use_container_width=True)
 
-    # ── 6. Gastos por categoría y mes (año actual) ───────────────────────────
-    st.divider()
-    st.markdown("##### 🗓️ Gastos por categoría y mes — " + str(hoy.year))
-
-    desde_anio = f"{hoy.year}-01-01"
-    hasta_anio = f"{hoy.year}-12-31"
-
-    txs_anio = obtener_transacciones(usuario_id=uid, desde=desde_anio, hasta=hasta_anio)
-    txs_msi_anio = obtener_transacciones(
-        usuario_id=uid, desde=desde_amplio, hasta=hasta_anio, tipo="gasto"
-    )
-    txs_msi_anio = [t for t in txs_msi_anio if t.get("meses_sin_intereses", 0) > 0]
-    if txs_msi_anio:
-        txs_anio = inyectar_proyecciones_msi(
-            txs_anio, desde=desde_anio, hasta=hasta_anio, txs_msi_origen=txs_msi_anio
-        )
-    gastos_anio = [t for t in txs_anio if t["tipo"] == "gasto"]
-
-    # Monto por (categoría, mes) + color + orden de aparición
-    cat_mes: dict[str, dict[int, float]] = defaultdict(lambda: defaultdict(float))
-    cat_colores: dict[str, str] = {}
-    for t in gastos_anio:
-        cat   = t.get("categoria_nombre") or "Sin categoría"
-        mes_i = int(t["fecha"][5:7])
-        cat_mes[cat][mes_i] += _monto_efectivo(t)
-        cat_colores.setdefault(cat, t.get("categoria_color") or "#888780")
-
-    if not cat_mes:
-        st.caption("Sin gastos registrados en el año.")
-    else:
-        meses_x = [MESES_ES[i][:3] for i in range(1, 13)]
-        # Mayor gasto total primero → orden de leyenda consistente
-        cats_orden = sorted(cat_mes, key=lambda c: sum(cat_mes[c].values()), reverse=True)
-
-        fig_cat_mes = go.Figure()
-        for cat in cats_orden:
-            valores = [cat_mes[cat].get(i, 0.0) for i in range(1, 13)]
-            fig_cat_mes.add_trace(go.Bar(
-                name=cat,
-                x=meses_x,
-                y=valores,
-                marker_color=cat_colores[cat],
-                hovertemplate=f"<b>{cat}</b><br>%{{x}}: $%{{y:,.2f}}<extra></extra>",
-            ))
-
-        fig_cat_mes.update_layout(
-            barmode="group",
-            height=440,
-            margin=dict(t=10, b=10, l=0, r=0),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
-            legend=dict(orientation="h", y=1.12, x=0, bgcolor="rgba(0,0,0,0)"),
-            hovermode="closest",
-        )
-        st.plotly_chart(fig_cat_mes, use_container_width=True)
-
-    # ── 7. Promedio mensual de gasto por categoría (año a la fecha) ──────────
+    # ── 6. Promedio mensual de gasto por categoría (año a la fecha) ──────────
     st.divider()
     st.markdown("##### 📐 Promedio mensual de gasto por categoría — " + str(hoy.year))
 
@@ -546,3 +485,61 @@ def render():
             f"(1 ene – {hoy.strftime('%d/%m')})."
         )
         st.plotly_chart(fig_prom, use_container_width=True)
+
+    # ── 7. Gastos por categoría y mes (año actual) ───────────────────────────
+    st.divider()
+    st.markdown("##### 🗓️ Gastos por categoría y mes — " + str(hoy.year))
+
+    desde_anio = f"{hoy.year}-01-01"
+    hasta_anio = f"{hoy.year}-12-31"
+
+    txs_anio = obtener_transacciones(usuario_id=uid, desde=desde_anio, hasta=hasta_anio)
+    txs_msi_anio = obtener_transacciones(
+        usuario_id=uid, desde=desde_amplio, hasta=hasta_anio, tipo="gasto"
+    )
+    txs_msi_anio = [t for t in txs_msi_anio if t.get("meses_sin_intereses", 0) > 0]
+    if txs_msi_anio:
+        txs_anio = inyectar_proyecciones_msi(
+            txs_anio, desde=desde_anio, hasta=hasta_anio, txs_msi_origen=txs_msi_anio
+        )
+    gastos_anio = [t for t in txs_anio if t["tipo"] == "gasto"]
+
+    # Monto por (categoría, mes) + color + orden de aparición
+    cat_mes: dict[str, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    cat_colores: dict[str, str] = {}
+    for t in gastos_anio:
+        cat   = t.get("categoria_nombre") or "Sin categoría"
+        mes_i = int(t["fecha"][5:7])
+        cat_mes[cat][mes_i] += _monto_efectivo(t)
+        cat_colores.setdefault(cat, t.get("categoria_color") or "#888780")
+
+    if not cat_mes:
+        st.caption("Sin gastos registrados en el año.")
+    else:
+        meses_x = [MESES_ES[i][:3] for i in range(1, 13)]
+        # Mayor gasto total primero → orden de leyenda y apilado consistente
+        cats_orden = sorted(cat_mes, key=lambda c: sum(cat_mes[c].values()), reverse=True)
+
+        fig_cat_mes = go.Figure()
+        for cat in cats_orden:
+            valores = [cat_mes[cat].get(i, 0.0) for i in range(1, 13)]
+            fig_cat_mes.add_trace(go.Bar(
+                name=cat,
+                x=meses_x,
+                y=valores,
+                marker_color=cat_colores[cat],
+                hovertemplate=f"<b>{cat}</b><br>%{{x}}: $%{{y:,.2f}}<extra></extra>",
+            ))
+
+        fig_cat_mes.update_layout(
+            barmode="stack",
+            height=440,
+            margin=dict(t=10, b=10, l=0, r=0),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
+            legend=dict(orientation="h", y=1.12, x=0, bgcolor="rgba(0,0,0,0)"),
+            hovermode="x unified",
+        )
+        st.plotly_chart(fig_cat_mes, use_container_width=True)
