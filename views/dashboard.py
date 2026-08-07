@@ -503,3 +503,46 @@ def render():
             hovermode="closest",
         )
         st.plotly_chart(fig_cat_mes, use_container_width=True)
+
+    # ── 7. Promedio mensual de gasto por categoría (año a la fecha) ──────────
+    st.divider()
+    st.markdown("##### 📐 Promedio mensual de gasto por categoría — " + str(hoy.year))
+
+    cat_total_ytd: dict[str, float] = defaultdict(float)
+    cat_color_ytd: dict[str, str] = {}
+    for t in gastos_ytd:
+        cat = t.get("categoria_nombre") or "Sin categoría"
+        cat_total_ytd[cat] += _monto_efectivo(t)
+        cat_color_ytd.setdefault(cat, t.get("categoria_color") or "#888780")
+
+    if not cat_total_ytd:
+        st.caption("Sin gastos registrados en el año.")
+    else:
+        n_meses_ytd = hoy.month  # meses transcurridos, incluye el actual
+        cat_prom = {c: total / n_meses_ytd for c, total in cat_total_ytd.items()}
+        # Ascending → el mayor promedio queda arriba en la barra horizontal
+        cats_prom_asc = sorted(cat_prom, key=lambda c: cat_prom[c])
+
+        fig_prom = go.Figure(go.Bar(
+            x=[cat_prom[c] for c in cats_prom_asc],
+            y=cats_prom_asc,
+            orientation="h",
+            marker_color=[cat_color_ytd[c] for c in cats_prom_asc],
+            text=[f"${cat_prom[c]:,.0f}/mes" for c in cats_prom_asc],
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>$%{x:,.2f} / mes<extra></extra>",
+        ))
+        fig_prom.update_layout(
+            height=max(250, len(cats_prom_asc) * 38 + 60),
+            margin=dict(t=10, b=10, l=0, r=100),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(showgrid=True, gridcolor="#f0f0f0", tickprefix="$"),
+            yaxis=dict(showgrid=False),
+            showlegend=False,
+        )
+        st.caption(
+            f"Basado en {n_meses_ytd} mes(es) transcurrido(s) de {hoy.year} "
+            f"(1 ene – {hoy.strftime('%d/%m')})."
+        )
+        st.plotly_chart(fig_prom, use_container_width=True)
