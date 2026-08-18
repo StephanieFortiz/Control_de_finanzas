@@ -3,7 +3,7 @@
 Este documento resume cómo poner en marcha las dos mejoras hechas al proyecto:
 
 1. **Caché en Streamlit** (`database/queries.py`, `app.py`) — ya está en el código, no requiere configuración adicional. Reduce el tiempo de carga porque deja de golpear la base de datos de Supabase en cada rerun.
-2. **Widget web de captura rápida** (`widget/captura_rapida.html`) — una página HTML independiente (no depende de Streamlit) para que tu novio registre un gasto desde el celular en ~10 segundos, sin abrir la app completa.
+2. **Widget web de captura rápida** (`widget/index.html`) — una página HTML independiente (no depende de Streamlit) para que tu novio registre un gasto desde el celular en ~10 segundos, sin abrir la app completa.
 
 ---
 
@@ -21,7 +21,7 @@ Este documento resume cómo poner en marcha las dos mejoras hechas al proyecto:
 
 ## Paso 2: Configurar el HTML (reemplazar 3 variables)
 
-Abre [widget/captura_rapida.html](widget/captura_rapida.html) y busca el bloque `Configuración de Supabase` dentro del `<script>`:
+Abre [widget/index.html](widget/index.html) y busca el bloque `Configuración de Supabase` dentro del `<script>`:
 
 ```js
 const SUPABASE_URL = 'YOUR_SUPABASE_URL';
@@ -108,7 +108,7 @@ El widget es un solo archivo HTML estático — no necesita build ni backend pro
 1. Sube la carpeta `widget/` a un repositorio de GitHub (puede ser este mismo repo).
 2. Ve a **Settings → Pages** del repo.
 3. En "Source", selecciona la rama y la carpeta `/widget` (o `/root` si mueves el HTML a la raíz de una rama dedicada).
-4. GitHub te da una URL tipo `https://tuusuario.github.io/Finanzas/captura_rapida.html`.
+4. GitHub te da una URL tipo `https://tuusuario.github.io/Finanzas/` (sirve `index.html` en la raíz automáticamente).
 
 En ambos casos, la URL es pública — cualquiera con el link puede abrir el formulario. La seguridad real la da RLS (Paso 3), no la URL en sí.
 
