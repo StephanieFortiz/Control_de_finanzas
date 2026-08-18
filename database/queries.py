@@ -13,6 +13,7 @@ Convenciones:
   - Funciones de cálculo:        calcular_*
 """
 
+import streamlit as st
 import psycopg2.extras
 from datetime import date, datetime
 from typing import Optional
@@ -38,6 +39,7 @@ def _row(conn, query, params=()):
 # USUARIOS
 # ======================================================================
 
+@st.cache_data(ttl=3600)
 def obtener_usuarios() -> list[dict]:
     conn = get_connection()
     result = _rows(conn, "SELECT * FROM usuario ORDER BY id")
@@ -55,6 +57,7 @@ def crear_usuario(nombre: str, color_perfil: str = "#378ADD") -> int:
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_usuarios.clear()
     return nuevo_id
 
 
@@ -62,6 +65,7 @@ def crear_usuario(nombre: str, color_perfil: str = "#378ADD") -> int:
 # CUENTAS
 # ======================================================================
 
+@st.cache_data(ttl=600)
 def obtener_cuentas(usuario_id: Optional[int] = None) -> list[dict]:
     conn = get_connection()
     if usuario_id:
@@ -93,6 +97,7 @@ def crear_cuenta(usuario_id: int, nombre: str, tipo: str,
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_cuentas.clear()
     return nuevo_id
 
 
@@ -100,6 +105,7 @@ def crear_cuenta(usuario_id: int, nombre: str, tipo: str,
 # TARJETAS DE CRÉDITO
 # ======================================================================
 
+@st.cache_data(ttl=600)
 def obtener_tarjetas(usuario_id: Optional[int] = None) -> list[dict]:
     conn = get_connection()
     if usuario_id:
@@ -131,6 +137,7 @@ def crear_tarjeta(usuario_id: int, nombre: str, banco: str,
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_tarjetas.clear()
     return nuevo_id
 
 
@@ -138,6 +145,7 @@ def crear_tarjeta(usuario_id: int, nombre: str, banco: str,
 # CATEGORÍAS
 # ======================================================================
 
+@st.cache_data(ttl=3600)
 def obtener_categorias(tipo: Optional[str] = None, incluir_inactivas: bool = False) -> list[dict]:
     conn = get_connection()
     filtros = []
@@ -167,6 +175,7 @@ def crear_categoria(nombre: str, icono: str, color: str, tipo: str) -> int:
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_categorias.clear()
     return nuevo_id
 
 
@@ -181,6 +190,7 @@ def actualizar_categoria(
         )
     conn.commit()
     conn.close()
+    obtener_categorias.clear()
 
 
 # ======================================================================
@@ -222,9 +232,11 @@ def crear_transaccion(
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_transacciones.clear()
     return nuevo_id
 
 
+@st.cache_data(ttl=300)
 def obtener_transacciones(
     usuario_id: Optional[int] = None,
     desde: Optional[str] = None,
@@ -345,6 +357,7 @@ def actualizar_transaccion(
         )
     conn.commit()
     conn.close()
+    obtener_transacciones.clear()
 
 
 def eliminar_transaccion(transaccion_id: int):
@@ -353,6 +366,7 @@ def eliminar_transaccion(transaccion_id: int):
         cur.execute("DELETE FROM transaccion WHERE id = %s", (transaccion_id,))
     conn.commit()
     conn.close()
+    obtener_transacciones.clear()
 
 
 def guardar_ajuste_msi(transaccion_id: int, mensualidad_num: int, monto: float) -> None:
@@ -420,9 +434,11 @@ def crear_prestamo(
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_prestamos.clear()
     return nuevo_id
 
 
+@st.cache_data(ttl=600)
 def obtener_prestamos(
     usuario_id: Optional[int] = None,
     estado: Optional[str] = None
@@ -496,6 +512,7 @@ def registrar_pago_prestamo(
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_prestamos.clear()
     return nuevo_id
 
 
@@ -533,6 +550,7 @@ def eliminar_prestamo(prestamo_id: int):
         cur.execute("DELETE FROM prestamo WHERE id = %s", (prestamo_id,))
     conn.commit()
     conn.close()
+    obtener_prestamos.clear()
 
 
 def obtener_transacciones_para_prestamo(
@@ -678,9 +696,11 @@ def registrar_liquidacion(usuario_origen_id: int, usuario_destino_id: int,
         nuevo_id = cur.fetchone()[0]
     conn.commit()
     conn.close()
+    obtener_liquidaciones.clear()
     return nuevo_id
 
 
+@st.cache_data(ttl=600)
 def obtener_liquidaciones() -> list[dict]:
     conn = get_connection()
     result = _rows(conn,
@@ -709,6 +729,7 @@ def actualizar_cuenta(
         )
     conn.commit()
     conn.close()
+    obtener_cuentas.clear()
 
 
 def obtener_cuentas_todas(usuario_id: Optional[int] = None) -> list[dict]:
@@ -745,6 +766,7 @@ def actualizar_tarjeta(
         )
     conn.commit()
     conn.close()
+    obtener_tarjetas.clear()
 
 
 def obtener_tarjetas_todas(usuario_id: Optional[int] = None) -> list[dict]:

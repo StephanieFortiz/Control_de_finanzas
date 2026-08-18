@@ -9,6 +9,12 @@ import streamlit as st
 from database.schema import crear_tablas, migrar_bd
 from database.queries import obtener_usuarios
 
+
+@st.cache_data(ttl=3600)
+def cached_obtener_usuarios():
+    return obtener_usuarios()
+
+
 st.set_page_config(
     page_title="Finanzas",
     page_icon="💳",
@@ -35,7 +41,7 @@ crear_tablas()
 migrar_bd()
 
 # ── Navegación ──────────────────────────────────────────────────────────
-usuarios = obtener_usuarios()
+usuarios = cached_obtener_usuarios()
 hay_usuarios = len(usuarios) >= 2
 
 with st.sidebar:
