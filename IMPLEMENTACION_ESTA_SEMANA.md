@@ -32,7 +32,7 @@ const USUARIO_ID_DEFECTO = 1;
 Reemplaza:
 - `YOUR_SUPABASE_URL` → tu Project URL del Paso 1.
 - `YOUR_SUPABASE_ANON_KEY` → tu anon public key del Paso 1.
-- `USUARIO_ID_DEFECTO` → el `id` de tu novio en la tabla `usuario`. Para verlo, en Supabase ve a **Table Editor → usuario** y busca su fila.
+- `USUARIO_ID_DEFECTO` → el `id` de tu novio en la tabla `usuario`. Para verlo, en Supabase ve a **Table Editor → usuario** y busca su fila. El widget ahora trae un selector de "Usuario" (por si alguna vez registra un gasto tuyo o al revés) — esta variable solo define cuál queda preseleccionado al abrir el formulario.
 
 Guarda el archivo.
 
@@ -46,13 +46,18 @@ Ve a Supabase → **SQL Editor** y ejecuta:
 
 ```sql
 -- Activar RLS en las tablas que usa el widget
+ALTER TABLE usuario ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categoria ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cuenta ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tarjeta_credito ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transaccion ENABLE ROW LEVEL SECURITY;
 
--- Permitir LECTURA pública de categorías, cuentas y tarjetas
+-- Permitir LECTURA pública de usuarios, categorías, cuentas y tarjetas
 -- (el widget las necesita para llenar los selects)
+CREATE POLICY "lectura_publica_usuario"
+  ON usuario FOR SELECT
+  USING (true);
+
 CREATE POLICY "lectura_publica_categoria"
   ON categoria FOR SELECT
   USING (true);
@@ -65,10 +70,11 @@ CREATE POLICY "lectura_publica_tarjeta"
   ON tarjeta_credito FOR SELECT
   USING (true);
 
--- Permitir SOLO INSERT público en transaccion (no update/delete/select general)
-CREATE POLICY "insertar_gasto_publico"
+-- Permitir SOLO INSERT público en transaccion (no update/delete/select general).
+-- El widget puede registrar tanto gastos como ingresos.
+CREATE POLICY "insertar_transaccion_publica"
   ON transaccion FOR INSERT
-  WITH CHECK (tipo = 'gasto');
+  WITH CHECK (tipo IN ('gasto', 'ingreso'));
 
 -- Permitir que test_widget.py verifique y borre ÚNICAMENTE sus propias filas
 -- de prueba (marcadas con descripcion = '[TEST_WIDGET]'). No expone el resto
@@ -82,12 +88,18 @@ CREATE POLICY "test_widget_delete"
   USING (descripcion = '[TEST_WIDGET]');
 ```
 
-Con esto, el widget puede leer catálogos e insertar gastos, pero **no puede leer, editar ni borrar** transacciones reales existentes — eso lo sigue haciendo solo la app de Streamlit (que se conecta directo por Postgres con las credenciales de `secrets.toml`, sin pasar por RLS). Las dos últimas policies son solo para que `test_widget.py` pueda auto-limpiarse; no dan acceso a datos reales porque exigen esa descripción exacta.
+Con esto, el widget puede leer catálogos e insertar gastos/ingresos, pero **no puede leer, editar ni borrar** transacciones reales existentes — eso lo sigue haciendo solo la app de Streamlit (que se conecta directo por Postgres con las credenciales de `secrets.toml`, sin pasar por RLS). Las dos últimas policies son solo para que `test_widget.py` pueda auto-limpiarse; no dan acceso a datos reales porque exigen esa descripción exacta.
 
 Si más adelante quieres restringir aún más (por ejemplo, que solo pueda insertar transacciones del usuario de tu novio), cambia el `WITH CHECK`:
 
 ```sql
-WITH CHECK (tipo = 'gasto' AND usuario_id = 2)  -- reemplaza 2 por su id real
+WITH CHECK (tipo IN ('gasto', 'ingreso') AND usuario_id = 2)  -- reemplaza 2 por su id real
+```
+
+Si ya habías corrido la versión anterior de este SQL (con la policy `insertar_gasto_publico`, que solo permitía `tipo = 'gasto'`), reemplázala por la nueva:
+
+```sql
+DROP POLICY IF EXISTS "insertar_gasto_publico" ON transaccion;
 ```
 
 ---

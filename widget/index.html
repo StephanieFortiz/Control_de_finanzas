@@ -149,6 +149,29 @@
 
   .campo-doble > div { flex: 1; }
 
+  .oculto { display: none !important; }
+
+  .msi-box {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #f4f9f8;
+    border-radius: 10px;
+  }
+
+  .msi-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.85rem;
+    color: #35606f;
+    cursor: pointer;
+  }
+
+  .msi-check input { width: auto; padding: 0; }
+
+  .msi-box select { margin-top: 8px; }
+
   @media (max-width: 400px) {
     .card { padding: 22px 16px 26px; border-radius: 16px; }
   }
@@ -177,6 +200,22 @@
 
     <div class="campo-doble">
       <div>
+        <label for="usuario">Usuario</label>
+        <select id="usuario" required>
+          <option value="">Cargando...</option>
+        </select>
+      </div>
+      <div>
+        <label for="tipo">Tipo</label>
+        <select id="tipo" required>
+          <option value="gasto">Gasto</option>
+          <option value="ingreso">Ingreso</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="campo-doble">
+      <div>
         <label for="categoria">Categoría</label>
         <select id="categoria" required>
           <option value="">Cargando...</option>
@@ -192,6 +231,22 @@
     <select id="medio" required>
       <option value="">Cargando...</option>
     </select>
+
+    <div id="msi-box" class="msi-box oculto">
+      <label class="msi-check">
+        <input type="checkbox" id="usar-msi">
+        Meses sin intereses
+      </label>
+      <select id="msi-meses" class="oculto">
+        <option value="3">3 meses</option>
+        <option value="6">6 meses</option>
+        <option value="9">9 meses</option>
+        <option value="12">12 meses</option>
+        <option value="18">18 meses</option>
+        <option value="20">20 meses</option>
+        <option value="24">24 meses</option>
+      </select>
+    </div>
 
     <label for="notas">Notas (opcional)</label>
     <textarea id="notas" placeholder="Algo más que quieras anotar..."></textarea>
@@ -246,39 +301,88 @@
     document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
   });
 
-  async function cargarDatos() {
-    try {
-      const [catRes, cuentasRes, tarjetasRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/categoria?select=id,nombre,icono&tipo=eq.gasto&activa=eq.1&order=nombre`, { headers: headersBase }),
-        fetch(`${SUPABASE_URL}/rest/v1/cuenta?select=id,nombre&usuario_id=eq.${USUARIO_ID_DEFECTO}&activa=eq.1&order=nombre`, { headers: headersBase }),
-        fetch(`${SUPABASE_URL}/rest/v1/tarjeta_credito?select=id,nombre,banco&usuario_id=eq.${USUARIO_ID_DEFECTO}&activa=eq.1&order=nombre`, { headers: headersBase }),
-      ]);
-
-      if (!catRes.ok || !cuentasRes.ok || !tarjetasRes.ok) {
-        throw new Error('No se pudieron cargar los datos de Supabase.');
-      }
-
-      const categorias = await catRes.json();
-      const cuentas = await cuentasRes.json();
-      const tarjetas = await tarjetasRes.json();
-
-      const selectCategoria = $('categoria');
-      selectCategoria.innerHTML = categorias
-        .map((c) => `<option value="${c.id}">${c.icono || '📦'} ${c.nombre}</option>`)
-        .join('') || '<option value="">Sin categorías</option>';
-
-      const selectMedio = $('medio');
-      const opcionesCuentas = cuentas
-        .map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`)
-        .join('');
-      const opcionesTarjetas = tarjetas
-        .map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`)
-        .join('');
-      selectMedio.innerHTML = opcionesCuentas + opcionesTarjetas || '<option value="">Sin cuentas/tarjetas</option>';
-    } catch (err) {
-      mostrarMensaje('❌ Error al cargar categorías/cuentas: ' + err.message, 'error');
+  function actualizarVisibilidadMsi() {
+    const esTarjeta = $('medio').value.startsWith('tarjeta:');
+    $('msi-box').classList.toggle('oculto', !esTarjeta);
+    if (!esTarjeta) {
+      $('usar-msi').checked = false;
+      $('msi-meses').classList.add('oculto');
     }
   }
+
+  $('medio').addEventListener('change', actualizarVisibilidadMsi);
+  $('usar-msi').addEventListener('change', () => {
+    $('msi-meses').classList.toggle('oculto', !$('usar-msi').checked);
+  });
+
+  async function cargarCategorias(tipo) {
+    const selectCategoria = $('categoria');
+    selectCategoria.innerHTML = '<option value="">Cargando...</option>';
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/categoria?select=id,nombre,icono&tipo=eq.${tipo}&activa=eq.1&order=nombre`,
+      { headers: headersBase }
+    );
+    if (!res.ok) throw new Error('No se pudieron cargar las categorías.');
+    const categorias = await res.json();
+    selectCategoria.innerHTML = categorias
+      .map((c) => `<option value="${c.id}">${c.icono || '📦'} ${c.nombre}</option>`)
+      .join('') || '<option value="">Sin categorías</option>';
+  }
+
+  async function cargarMedios(usuarioId) {
+    const selectMedio = $('medio');
+    selectMedio.innerHTML = '<option value="">Cargando...</option>';
+    const [cuentasRes, tarjetasRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/cuenta?select=id,nombre&usuario_id=eq.${usuarioId}&activa=eq.1&order=nombre`, { headers: headersBase }),
+      fetch(`${SUPABASE_URL}/rest/v1/tarjeta_credito?select=id,nombre,banco&usuario_id=eq.${usuarioId}&activa=eq.1&order=nombre`, { headers: headersBase }),
+    ]);
+    if (!cuentasRes.ok || !tarjetasRes.ok) throw new Error('No se pudieron cargar las cuentas/tarjetas.');
+    const cuentas = await cuentasRes.json();
+    const tarjetas = await tarjetasRes.json();
+    const opcionesCuentas = cuentas
+      .map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`)
+      .join('');
+    const opcionesTarjetas = tarjetas
+      .map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`)
+      .join('');
+    selectMedio.innerHTML = opcionesCuentas + opcionesTarjetas || '<option value="">Sin cuentas/tarjetas</option>';
+    actualizarVisibilidadMsi();
+  }
+
+  async function cargarDatos() {
+    try {
+      const usuariosRes = await fetch(`${SUPABASE_URL}/rest/v1/usuario?select=id,nombre&order=id`, { headers: headersBase });
+      if (!usuariosRes.ok) throw new Error('No se pudieron cargar los usuarios.');
+      const usuarios = await usuariosRes.json();
+
+      const selectUsuario = $('usuario');
+      selectUsuario.innerHTML = usuarios
+        .map((u) => `<option value="${u.id}">${u.nombre}</option>`)
+        .join('') || '<option value="">Sin usuarios</option>';
+      if (usuarios.some((u) => u.id === USUARIO_ID_DEFECTO)) {
+        selectUsuario.value = String(USUARIO_ID_DEFECTO);
+      }
+
+      await Promise.all([
+        cargarCategorias($('tipo').value),
+        cargarMedios(selectUsuario.value),
+      ]);
+    } catch (err) {
+      mostrarMensaje('❌ Error al cargar datos: ' + err.message, 'error');
+    }
+  }
+
+  $('usuario').addEventListener('change', () => {
+    cargarMedios($('usuario').value).catch(
+      (err) => mostrarMensaje('❌ Error al cargar cuentas/tarjetas: ' + err.message, 'error')
+    );
+  });
+
+  $('tipo').addEventListener('change', () => {
+    cargarCategorias($('tipo').value).catch(
+      (err) => mostrarMensaje('❌ Error al cargar categorías: ' + err.message, 'error')
+    );
+  });
 
   cargarDatos();
 
@@ -288,30 +392,35 @@
 
     const descripcion = $('descripcion').value.trim();
     const monto = parseFloat($('monto').value);
+    const usuarioId = $('usuario').value;
+    const tipo = $('tipo').value;
     const categoriaId = $('categoria').value;
     const fecha = $('fecha').value;
     const medio = $('medio').value;
     const notas = $('notas').value.trim();
 
-    if (!descripcion || !monto || monto <= 0 || !categoriaId || !fecha || !medio) {
+    if (!descripcion || !monto || monto <= 0 || !usuarioId || !categoriaId || !fecha || !medio) {
       mostrarMensaje('⚠️ Completa todos los campos requeridos.', 'error');
       return;
     }
 
     const [tipoMedio, medioId] = medio.split(':');
+    const esTarjeta = tipoMedio === 'tarjeta';
+    const mesesSinIntereses = (esTarjeta && $('usar-msi').checked) ? Number($('msi-meses').value) : 0;
+    const montoPorMes = mesesSinIntereses > 0 ? Math.round((monto / mesesSinIntereses) * 100) / 100 : 0;
 
     const payload = {
-      usuario_id: USUARIO_ID_DEFECTO,
+      usuario_id: Number(usuarioId),
       cuenta_id: tipoMedio === 'cuenta' ? Number(medioId) : null,
-      tarjeta_id: tipoMedio === 'tarjeta' ? Number(medioId) : null,
+      tarjeta_id: esTarjeta ? Number(medioId) : null,
       categoria_id: Number(categoriaId),
       monto: monto,
       fecha: fecha,
       descripcion: descripcion,
-      tipo: 'gasto',
+      tipo: tipo,
       notas: notas,
-      meses_sin_intereses: 0,
-      monto_por_mes: 0,
+      meses_sin_intereses: mesesSinIntereses,
+      monto_por_mes: montoPorMes,
     };
 
     btnGuardar.disabled = true;
@@ -330,9 +439,14 @@
       }
 
       mostrarMensaje('✅ ¡Gasto guardado con éxito!', 'exito');
+      const usuarioAntes = $('usuario').value;
       $('form-gasto').reset();
       $('fecha').valueAsDate = new Date();
+      $('usuario').value = usuarioAntes;
+      $('tipo').value = 'gasto';
       document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
+      await cargarCategorias('gasto');
+      actualizarVisibilidadMsi();
     } catch (err) {
       mostrarMensaje('❌ Error al guardar: ' + err.message, 'error');
     } finally {
