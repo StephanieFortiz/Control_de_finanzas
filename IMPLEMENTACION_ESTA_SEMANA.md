@@ -3,14 +3,16 @@
 Este documento resume cómo poner en marcha las tres mejoras hechas al proyecto:
 
 1. **Caché en Streamlit** (`database/queries.py`, `app.py`) — ya está en el código, no requiere configuración adicional. Reduce el tiempo de carga porque deja de golpear la base de datos de Supabase en cada rerun.
-2. **Widget web de captura rápida** (`widget/index.html`) — una página HTML independiente (no depende de Streamlit) para que tu novio registre un gasto desde el celular en ~10 segundos, sin abrir la app completa.
-3. **Backend serverless** (`widget/api/data.js`) — una función en Vercel que conecta directo a Postgres (igual que la app de Streamlit). El widget ya no llama a la REST API pública de Supabase — eso evita el incidente que tuvieron con su API Gateway (`PGRST002` / 503), porque esa capa ya no está en el camino.
+2. **Widget web de captura rápida** (`widget/index.html`) — una página HTML independiente (no depende de Streamlit) para registrar un gasto (o un préstamo/apoyo ligado) desde el celular en segundos, sin abrir la app completa.
+3. **Backend serverless** (`widget/api/data.js` y `widget/api/prestamo.js`) — funciones en Vercel que conectan directo a Postgres (igual que la app de Streamlit), usando el **connection pooler** de Supabase. El widget ya no llama a la REST API pública de Supabase — eso evita el incidente que tuvieron con su API Gateway (`PGRST002` / 503), porque esa capa ya no está en el camino.
 
 ---
 
 ## Paso 1: Configurar las variables de entorno en Vercel
 
-El backend necesita las mismas credenciales que ya tienes en `.streamlit/secrets.toml` (sección `[database]`), pero como variables de entorno de Vercel — **nunca las pongas en el HTML ni las subas a git**, a diferencia de la `anon key` de antes, esta sí es la contraseña real de tu base de datos.
+El backend necesita credenciales de Postgres — como variables de entorno de Vercel, **nunca en el HTML ni en git**. A diferencia de la `anon key` de antes, esta sí es la contraseña real de tu base de datos.
+
+⚠️ **Usa las credenciales del connection pooler, no las de `.streamlit/secrets.toml`.** El host directo (`db.xxx.supabase.co`) solo resuelve por IPv6, y Vercel no tiene salida IPv6 — por eso el primer intento dio `ENOTFOUND`. El pooler sí es compatible con IPv4. Sácalo de Supabase → botón **Connect** → pestaña **Transaction pooler**.
 
 Desde la carpeta `widget/`:
 
@@ -22,15 +24,15 @@ vercel env add PGUSER production
 vercel env add PGPASSWORD production
 ```
 
-Cada comando te va a pedir el valor — usa los mismos de `.streamlit/secrets.toml`:
+Cada comando te va a pedir el valor:
 
-| Variable | Valor (de tu secrets.toml) |
+| Variable | Valor |
 |---|---|
-| `PGHOST` | `db.mehwuyolvfjvmlobcsms.supabase.co` |
-| `PGPORT` | `5432` |
+| `PGHOST` | `aws-1-us-east-1.pooler.supabase.com` |
+| `PGPORT` | `6543` |
 | `PGDATABASE` | `postgres` |
-| `PGUSER` | `postgres` |
-| `PGPASSWORD` | tu contraseña de Postgres |
+| `PGUSER` | `postgres.mehwuyolvfjvmlobcsms` |
+| `PGPASSWORD` | tu contraseña de Postgres (la misma de `.streamlit/secrets.toml`, sin comillas) |
 
 Alternativa sin CLI: Vercel → tu proyecto `fin-oscap` → **Settings → Environment Variables** → agrégalas ahí una por una (Environment: *Production*).
 
@@ -45,6 +47,18 @@ const USUARIO_ID_DEFECTO = 1;
 ```
 
 Es el `id` (en la tabla `usuario`) que queda preseleccionado al abrir el formulario — el widget igual trae un selector de "Usuario" por si hace falta cambiarlo ahí mismo. Para ver los ids, en Supabase ve a **Table Editor → usuario**. Si ya está en el valor correcto, no necesitas tocar nada.
+
+---
+
+## Qué campos tiene el formulario
+
+El widget replica los campos principales de "Nueva transacción" en Streamlit:
+
+- **Descripción, Monto, Usuario, Tipo (gasto/ingreso), Categoría, Fecha, Medio (cuenta/tarjeta), Notas.**
+- **Meses sin intereses** — aparece solo si el medio es una tarjeta; calcula `monto_por_mes` igual que la app.
+- **💸 Es préstamo o apoyo** — checkbox opcional al final. Al marcarlo aparece: con quién (pareja / persona externa), qué pasó (te apoyan / tú pagaste por alguien), monto del apoyo (con botones "Completo"/"La mitad", o escribe uno fijo), y cómo se paga (un solo pago / abonos libres / conforme a MSI — esta última solo si la transacción usa MSI de tarjeta). Se guarda como un registro en `prestamo` ligado a la transacción, vía `widget/api/prestamo.js` — se ve en la app en **🤝 Préstamos**.
+
+Simplificación respecto a la app: no incluye la opción de "Porcentaje" para el monto del apoyo (en la app sí existe) — si la necesitas, usa el campo de monto fijo y calcula el porcentaje tú misma, o pide que la agreguemos.
 
 ---
 
@@ -150,7 +164,7 @@ Debe regresar un JSON con `usuarios`, `categorias`, `cuentas` y `tarjetas`. Si d
 **Prueba end-to-end:**
 
 1. Abre la URL desplegada en el celular de tu novio.
-2. Que registre un gasto de prueba (ej. "Café — $50").
+2. Que registre un gasto de prueba (ej. "Café — $50"). Si quieres probar también el préstamo, márcalo como apoyo antes de guardar y confirma que aparece en **🤝 Préstamos** en Streamlit.
 3. Verifica en la app de Streamlit: abre **Dashboard** o **Transacciones** y confirma que el gasto aparece.
    - Si no aparece de inmediato, recuerda que `obtener_transacciones` tiene caché de 5 minutos (`ttl=300`) — espera ese tiempo o reinicia la app (`R` en Streamlit) para forzar refresco.
 4. Borra la transacción de prueba desde la app si no era un gasto real.

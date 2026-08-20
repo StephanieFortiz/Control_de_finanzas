@@ -1,20 +1,4 @@
-const { Pool } = require('pg');
-
-let pool;
-function getPool() {
-  if (!pool) {
-    pool = new Pool({
-      host: process.env.PGHOST,
-      port: Number(process.env.PGPORT || 5432),
-      database: process.env.PGDATABASE,
-      user: process.env.PGUSER,
-      password: process.env.PGPASSWORD,
-      ssl: { rejectUnauthorized: false },
-      max: 1,
-    });
-  }
-  return pool;
-}
+const { getPool } = require('./_db');
 
 module.exports = async (req, res) => {
   const db = getPool();
@@ -72,12 +56,13 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'No puede tener cuenta y tarjeta al mismo tiempo.' });
       }
 
-      await db.query(
+      const ins = await db.query(
         `INSERT INTO transaccion
            (usuario_id, cuenta_id, tarjeta_id, categoria_id,
             monto, fecha, descripcion, tipo,
             notas, meses_sin_intereses, monto_por_mes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING id`,
         [
           usuario_id, cuenta_id || null, tarjeta_id || null, categoria_id,
           monto, fecha, descripcion, tipo,
@@ -85,7 +70,7 @@ module.exports = async (req, res) => {
         ]
       );
 
-      return res.status(201).json({ ok: true });
+      return res.status(201).json({ ok: true, id: ins.rows[0].id });
     }
 
     res.setHeader('Allow', 'GET, POST');

@@ -251,6 +251,41 @@
     <label for="notas">Notas (opcional)</label>
     <textarea id="notas" placeholder="Algo más que quieras anotar..."></textarea>
 
+    <label class="msi-check" style="margin-top:14px">
+      <input type="checkbox" id="es-prestamo">
+      💸 Es préstamo o apoyo
+    </label>
+
+    <div id="prestamo-box" class="msi-box oculto">
+      <label for="p-contraparte">¿Con quién?</label>
+      <select id="p-contraparte">
+        <option value="pareja">Mi pareja</option>
+        <option value="externa">Persona externa</option>
+      </select>
+
+      <input type="text" id="p-nombre-externo" class="oculto" placeholder="Nombre (ej. Edgar, Mamá)" style="margin-top:8px">
+
+      <label for="p-direccion">¿Qué pasó?</label>
+      <select id="p-direccion">
+        <option value="me_apoyan">Me van a apoyar a pagar esto</option>
+        <option value="yo_pague">Yo pagué por alguien (me van a pagar)</option>
+      </select>
+
+      <label for="p-monto">Monto del préstamo</label>
+      <input type="number" id="p-monto" step="0.01" min="0.01" placeholder="0.00">
+      <div class="montos-rapidos" id="p-montos-rapidos">
+        <button type="button" class="monto-btn p-monto-btn" data-modo="completo">Completo</button>
+        <button type="button" class="monto-btn p-monto-btn" data-modo="mitad">La mitad</button>
+      </div>
+
+      <label for="p-forma-pago">¿Cómo van a pagar?</label>
+      <select id="p-forma-pago">
+        <option value="unico">Un solo pago</option>
+        <option value="abonos">Abonos libres</option>
+        <option value="msi" id="p-opcion-msi">Conforme a MSI</option>
+      </select>
+    </div>
+
     <button type="submit" id="btn-guardar">Guardar gasto</button>
 
     <div class="mensaje" id="mensaje"></div>
@@ -282,16 +317,16 @@
   // Fecha de hoy por defecto
   $('fecha').valueAsDate = new Date();
 
-  // Botones de montos rápidos
-  document.querySelectorAll('.monto-btn').forEach((btn) => {
+  // Botones de montos rápidos (monto principal)
+  document.querySelectorAll('#montos-rapidos .monto-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       $('monto').value = btn.dataset.monto;
-      document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
+      document.querySelectorAll('#montos-rapidos .monto-btn').forEach((b) => b.classList.remove('activo'));
       btn.classList.add('activo');
     });
   });
   $('monto').addEventListener('input', () => {
-    document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
+    document.querySelectorAll('#montos-rapidos .monto-btn').forEach((b) => b.classList.remove('activo'));
   });
 
   function actualizarVisibilidadMsi() {
@@ -301,12 +336,70 @@
       $('usar-msi').checked = false;
       $('msi-meses').classList.add('oculto');
     }
+    actualizarOpcionMsiPrestamo();
+  }
+
+  function mesesSinInteresesActual() {
+    const esTarjeta = $('medio').value.startsWith('tarjeta:');
+    return (esTarjeta && $('usar-msi').checked) ? Number($('msi-meses').value) : 0;
+  }
+
+  function actualizarOpcionMsiPrestamo() {
+    const meses = mesesSinInteresesActual();
+    const opt = $('p-opcion-msi');
+    if (meses > 0) {
+      opt.textContent = `Conforme a MSI (${meses} meses)`;
+      opt.hidden = false;
+    } else {
+      opt.hidden = true;
+      if ($('p-forma-pago').value === 'msi') {
+        $('p-forma-pago').value = 'abonos';
+      }
+    }
+  }
+
+  $('msi-meses').addEventListener('change', actualizarOpcionMsiPrestamo);
+
+  // ── Préstamo / apoyo ────────────────────────────────────────────────
+  $('es-prestamo').addEventListener('change', () => {
+    const activo = $('es-prestamo').checked;
+    $('prestamo-box').classList.toggle('oculto', !activo);
+    if (activo) actualizarOpcionMsiPrestamo();
+  });
+
+  $('p-contraparte').addEventListener('change', () => {
+    $('p-nombre-externo').classList.toggle('oculto', $('p-contraparte').value !== 'externa');
+  });
+
+  document.querySelectorAll('#p-montos-rapidos .p-monto-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const base = parseFloat($('monto').value) || 0;
+      const valor = btn.dataset.modo === 'mitad' ? Math.round((base / 2) * 100) / 100 : base;
+      $('p-monto').value = valor;
+      document.querySelectorAll('#p-montos-rapidos .p-monto-btn').forEach((b) => b.classList.remove('activo'));
+      btn.classList.add('activo');
+    });
+  });
+
+  function resetearPrestamo() {
+    $('es-prestamo').checked = false;
+    $('prestamo-box').classList.add('oculto');
+    $('p-contraparte').value = 'pareja';
+    $('p-nombre-externo').value = '';
+    $('p-nombre-externo').classList.add('oculto');
+    $('p-direccion').value = 'me_apoyan';
+    $('p-monto').value = '';
+    $('p-forma-pago').value = 'unico';
+    document.querySelectorAll('#p-montos-rapidos .p-monto-btn').forEach((b) => b.classList.remove('activo'));
   }
 
   $('medio').addEventListener('change', actualizarVisibilidadMsi);
   $('usar-msi').addEventListener('change', () => {
     $('msi-meses').classList.toggle('oculto', !$('usar-msi').checked);
+    actualizarOpcionMsiPrestamo();
   });
+
+  let usuariosCache = [];
 
   async function pedirDatos(usuarioId, tipo) {
     const res = await fetch(`/api/data?usuario_id=${usuarioId}&tipo=${tipo}`);
@@ -318,6 +411,7 @@
   }
 
   function poblarUsuarios(usuarios) {
+    usuariosCache = usuarios;
     const selectUsuario = $('usuario');
     selectUsuario.innerHTML = usuarios
       .map((u) => `<option value="${u.id}">${u.nombre}</option>`)
@@ -397,6 +491,58 @@
     const mesesSinIntereses = (esTarjeta && $('usar-msi').checked) ? Number($('msi-meses').value) : 0;
     const montoPorMes = mesesSinIntereses > 0 ? Math.round((monto / mesesSinIntereses) * 100) / 100 : 0;
 
+    // ── Préstamo / apoyo (opcional) ──
+    let prestamoPayload = null;
+    if ($('es-prestamo').checked) {
+      const pMonto = parseFloat($('p-monto').value);
+      const esParejaP = $('p-contraparte').value === 'pareja';
+      const nombreExterno = esParejaP ? null : ($('p-nombre-externo').value.trim() || null);
+
+      if (!pMonto || pMonto <= 0) {
+        mostrarMensaje('⚠️ Indica el monto del préstamo.', 'error');
+        return;
+      }
+      if (!esParejaP && !nombreExterno) {
+        mostrarMensaje('⚠️ Escribe el nombre de la persona externa.', 'error');
+        return;
+      }
+
+      const otro = usuariosCache.find((u) => u.id !== Number(usuarioId)) || null;
+      if (esParejaP && !otro) {
+        mostrarMensaje('⚠️ No se encontró a tu pareja en el sistema.', 'error');
+        return;
+      }
+
+      let acreedorId, deudorId;
+      if ($('p-direccion').value === 'me_apoyan') {
+        acreedorId = esParejaP ? otro.id : null;
+        deudorId = Number(usuarioId);
+      } else {
+        acreedorId = Number(usuarioId);
+        deudorId = esParejaP ? otro.id : null;
+      }
+
+      const formaPago = $('p-forma-pago').value;
+      let mesesMsiP = null;
+      let montoPorMesP = null;
+      if (formaPago === 'msi') {
+        mesesMsiP = mesesSinIntereses;
+        montoPorMesP = Math.round((pMonto / mesesMsiP) * 100) / 100;
+      }
+
+      prestamoPayload = {
+        monto: pMonto,
+        fecha: fecha,
+        notas: descripcion,
+        acreedor_id: acreedorId,
+        deudor_id: deudorId,
+        nombre_externo: nombreExterno,
+        tipo_pago: formaPago,
+        meses_msi: mesesMsiP,
+        monto_por_mes: montoPorMesP,
+      };
+    }
+
     const payload = {
       usuario_id: Number(usuarioId),
       cuenta_id: tipoMedio === 'cuenta' ? Number(medioId) : null,
@@ -426,13 +572,33 @@
         throw new Error(cuerpo.error || `HTTP ${res.status}`);
       }
 
-      mostrarMensaje('✅ ¡Gasto guardado con éxito!', 'exito');
+      const { id: txId } = await res.json();
+      let mensajeFinal = '✅ ¡Gasto guardado con éxito!';
+      let tipoFinal = 'exito';
+
+      if (prestamoPayload) {
+        const resP = await fetch('/api/prestamo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...prestamoPayload, transaccion_id: txId }),
+        });
+        if (!resP.ok) {
+          const cuerpoP = await resP.json().catch(() => ({}));
+          mensajeFinal = '⚠️ El gasto se guardó, pero el préstamo falló: ' + (cuerpoP.error || `HTTP ${resP.status}`);
+          tipoFinal = 'error';
+        } else {
+          mensajeFinal = '✅ ¡Gasto y préstamo guardados con éxito!';
+        }
+      }
+
+      mostrarMensaje(mensajeFinal, tipoFinal);
       const usuarioAntes = $('usuario').value;
       $('form-gasto').reset();
       $('fecha').valueAsDate = new Date();
       $('usuario').value = usuarioAntes;
       $('tipo').value = 'gasto';
       document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
+      resetearPrestamo();
       await refrescarDependientes();
     } catch (err) {
       mostrarMensaje('❌ Error al guardar: ' + err.message, 'error');
