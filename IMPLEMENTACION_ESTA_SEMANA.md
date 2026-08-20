@@ -1,48 +1,62 @@
 # Implementación de esta semana: caché + widget de captura rápida
 
-Este documento resume cómo poner en marcha las dos mejoras hechas al proyecto:
+Este documento resume cómo poner en marcha las tres mejoras hechas al proyecto:
 
 1. **Caché en Streamlit** (`database/queries.py`, `app.py`) — ya está en el código, no requiere configuración adicional. Reduce el tiempo de carga porque deja de golpear la base de datos de Supabase en cada rerun.
 2. **Widget web de captura rápida** (`widget/index.html`) — una página HTML independiente (no depende de Streamlit) para que tu novio registre un gasto desde el celular en ~10 segundos, sin abrir la app completa.
+3. **Backend serverless** (`widget/api/data.js`) — una función en Vercel que conecta directo a Postgres (igual que la app de Streamlit). El widget ya no llama a la REST API pública de Supabase — eso evita el incidente que tuvieron con su API Gateway (`PGRST002` / 503), porque esa capa ya no está en el camino.
 
 ---
 
-## Paso 1: Obtener credenciales de Supabase
+## Paso 1: Configurar las variables de entorno en Vercel
 
-1. Entra a [supabase.com](https://supabase.com) → tu proyecto de Finanzas.
-2. Ve a **Settings → API**.
-3. Copia dos valores:
-   - **Project URL** → algo como `https://xxxxxxxxxxxx.supabase.co`
-   - **anon public key** (la clave pública, NO la `service_role`) → un string largo tipo JWT.
+El backend necesita las mismas credenciales que ya tienes en `.streamlit/secrets.toml` (sección `[database]`), pero como variables de entorno de Vercel — **nunca las pongas en el HTML ni las subas a git**, a diferencia de la `anon key` de antes, esta sí es la contraseña real de tu base de datos.
 
-⚠️ La `anon key` es segura de exponer en un HTML público **siempre y cuando** tengas RLS (Row Level Security) configurado correctamente — ver Paso 3. Nunca uses la `service_role key` en el widget.
+Desde la carpeta `widget/`:
+
+```powershell
+vercel env add PGHOST production
+vercel env add PGPORT production
+vercel env add PGDATABASE production
+vercel env add PGUSER production
+vercel env add PGPASSWORD production
+```
+
+Cada comando te va a pedir el valor — usa los mismos de `.streamlit/secrets.toml`:
+
+| Variable | Valor (de tu secrets.toml) |
+|---|---|
+| `PGHOST` | `db.mehwuyolvfjvmlobcsms.supabase.co` |
+| `PGPORT` | `5432` |
+| `PGDATABASE` | `postgres` |
+| `PGUSER` | `postgres` |
+| `PGPASSWORD` | tu contraseña de Postgres |
+
+Alternativa sin CLI: Vercel → tu proyecto `fin-oscap` → **Settings → Environment Variables** → agrégalas ahí una por una (Environment: *Production*).
 
 ---
 
-## Paso 2: Configurar el HTML (reemplazar 3 variables)
+## Paso 2: (Opcional) Ajustar el usuario por defecto del widget
 
-Abre [widget/index.html](widget/index.html) y busca el bloque `Configuración de Supabase` dentro del `<script>`:
+Abre [widget/index.html](widget/index.html) y busca, dentro del `<script>`:
 
 ```js
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
 const USUARIO_ID_DEFECTO = 1;
 ```
 
-Reemplaza:
-- `YOUR_SUPABASE_URL` → tu Project URL del Paso 1.
-- `YOUR_SUPABASE_ANON_KEY` → tu anon public key del Paso 1.
-- `USUARIO_ID_DEFECTO` → el `id` de tu novio en la tabla `usuario`. Para verlo, en Supabase ve a **Table Editor → usuario** y busca su fila. El widget ahora trae un selector de "Usuario" (por si alguna vez registra un gasto tuyo o al revés) — esta variable solo define cuál queda preseleccionado al abrir el formulario.
-
-Guarda el archivo.
+Es el `id` (en la tabla `usuario`) que queda preseleccionado al abrir el formulario — el widget igual trae un selector de "Usuario" por si hace falta cambiarlo ahí mismo. Para ver los ids, en Supabase ve a **Table Editor → usuario**. Si ya está en el valor correcto, no necesitas tocar nada.
 
 ---
 
-## Paso 3: Habilitar RLS en Supabase (SQL para policies)
+## Paso 3 (opcional/heredado): RLS en Supabase
+
+⚠️ **Ya no es necesario para el widget.** Esto era para cuando el widget llamaba a la REST API de Supabase con la `anon key`. Ahora el backend (`widget/api/data.js`) se conecta directo a Postgres con el usuario `postgres`, que no pasa por RLS — así que este paso no bloquea ni habilita nada del flujo actual. Déjalo aquí solo por si en el futuro vuelves a exponer datos por REST/anon key para algo más.
 
 Por defecto, si RLS está desactivado, cualquiera con la URL del proyecto puede leer/escribir todo. Con RLS activado, defines exactamente qué puede hacer la `anon key`.
 
 Ve a Supabase → **SQL Editor** y ejecuta:
+
+Este bloque es seguro de correr las veces que quieras — primero borra las policies si ya existían (`DROP POLICY IF EXISTS`) y luego las vuelve a crear, así que no truena si ya lo habías corrido antes:
 
 ```sql
 -- Activar RLS en las tablas que usa el widget
@@ -51,6 +65,16 @@ ALTER TABLE categoria ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cuenta ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tarjeta_credito ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transaccion ENABLE ROW LEVEL SECURITY;
+
+-- Quitar policies previas (por si ya habías corrido este script antes)
+DROP POLICY IF EXISTS "lectura_publica_usuario" ON usuario;
+DROP POLICY IF EXISTS "lectura_publica_categoria" ON categoria;
+DROP POLICY IF EXISTS "lectura_publica_cuenta" ON cuenta;
+DROP POLICY IF EXISTS "lectura_publica_tarjeta" ON tarjeta_credito;
+DROP POLICY IF EXISTS "insertar_gasto_publico" ON transaccion;
+DROP POLICY IF EXISTS "insertar_transaccion_publica" ON transaccion;
+DROP POLICY IF EXISTS "test_widget_select" ON transaccion;
+DROP POLICY IF EXISTS "test_widget_delete" ON transaccion;
 
 -- Permitir LECTURA pública de usuarios, categorías, cuentas y tarjetas
 -- (el widget las necesita para llenar los selects)
@@ -96,44 +120,42 @@ Si más adelante quieres restringir aún más (por ejemplo, que solo pueda inser
 WITH CHECK (tipo IN ('gasto', 'ingreso') AND usuario_id = 2)  -- reemplaza 2 por su id real
 ```
 
-Si ya habías corrido la versión anterior de este SQL (con la policy `insertar_gasto_publico`, que solo permitía `tipo = 'gasto'`), reemplázala por la nueva:
-
-```sql
-DROP POLICY IF EXISTS "insertar_gasto_publico" ON transaccion;
-```
-
 ---
 
-## Paso 4: Desplegar en Vercel o GitHub Pages
+## Paso 4: Desplegar en Vercel
 
-El widget es un solo archivo HTML estático — no necesita build ni backend propio.
-
-### Opción A — Vercel (recomendado, más rápido)
+⚠️ Ahora tiene que ser Vercel (o algo con funciones serverless) — **GitHub Pages ya no sirve**, porque es hosting puramente estático y no puede correr `widget/api/data.js`.
 
 1. Instala la CLI si no la tienes: `npm i -g vercel`
 2. Desde la carpeta `widget/`, corre: `vercel --prod`
-3. Sigue las instrucciones (crea cuenta gratis si no tienes). Vercel te da una URL tipo `https://tu-widget.vercel.app`.
+   - La primera vez instala la dependencia `pg` automáticamente a partir de `widget/package.json`.
+   - Como el proyecto `fin-oscap` ya existe (de tu primer deploy), va a detectarlo solo.
+3. Cuando termine te da la URL, ej. `https://fin-oscap.vercel.app`.
 4. Abre esa URL en el celular de tu novio y agrégala a la pantalla de inicio ("Agregar a pantalla de inicio") para que se sienta como una app.
 
-### Opción B — GitHub Pages (gratis, sin CLI)
-
-1. Sube la carpeta `widget/` a un repositorio de GitHub (puede ser este mismo repo).
-2. Ve a **Settings → Pages** del repo.
-3. En "Source", selecciona la rama y la carpeta `/widget` (o `/root` si mueves el HTML a la raíz de una rama dedicada).
-4. GitHub te da una URL tipo `https://tuusuario.github.io/Finanzas/` (sirve `index.html` en la raíz automáticamente).
-
-En ambos casos, la URL es pública — cualquiera con el link puede abrir el formulario. La seguridad real la da RLS (Paso 3), no la URL en sí.
+Si cambiaste algo en `widget/index.html` o `widget/api/data.js`, siempre tienes que repetir `vercel --prod` para que se vea reflejado — Vercel no se entera solo de los cambios en tu disco a menos que conectes un repo de Git (ver el aviso al inicio de esta conversación sobre "vercel.link/git").
 
 ---
 
-## Paso 5: Testing (tu novio usa el widget, verifica que aparezca en el Dashboard)
+## Paso 5: Testing
 
-1. Antes de desplegar, corre `python test_widget.py` (requiere `pip install requests`, ya agregado a `requirements.txt`) para confirmar que la conexión y el INSERT funcionan. Te pedirá `SUPABASE_URL` y `SUPABASE_ANON_KEY` (o defínelas como variables de entorno antes de correrlo).
-2. Abre la URL desplegada en el celular de tu novio.
-3. Que registre un gasto de prueba (ej. "Café — $50").
-4. Verifica en la app de Streamlit: abre **Dashboard** o **Transacciones** y confirma que el gasto aparece.
+**Smoke test del backend, sin abrir el widget** — reemplaza la URL por la tuya:
+
+```powershell
+curl "https://fin-oscap.vercel.app/api/data?usuario_id=1&tipo=gasto"
+```
+
+Debe regresar un JSON con `usuarios`, `categorias`, `cuentas` y `tarjetas`. Si da error 500, el mensaje suele decir si es de conexión (revisa las variables de entorno del Paso 1) o de alguna columna/tabla.
+
+**Prueba end-to-end:**
+
+1. Abre la URL desplegada en el celular de tu novio.
+2. Que registre un gasto de prueba (ej. "Café — $50").
+3. Verifica en la app de Streamlit: abre **Dashboard** o **Transacciones** y confirma que el gasto aparece.
    - Si no aparece de inmediato, recuerda que `obtener_transacciones` tiene caché de 5 minutos (`ttl=300`) — espera ese tiempo o reinicia la app (`R` en Streamlit) para forzar refresco.
-5. Borra la transacción de prueba desde la app si no era un gasto real.
+4. Borra la transacción de prueba desde la app si no era un gasto real.
+
+`test_widget.py` sigue probando el camino viejo (REST de Supabase + anon key) — útil para cuando el incidente de Supabase se resuelva y quieras confirmar que ese camino también sigue sano, pero no cubre `widget/api/data.js`. El `curl` de arriba es el equivalente para el camino nuevo.
 
 ---
 

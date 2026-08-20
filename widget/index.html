@@ -258,19 +258,12 @@
 </div>
 
 <script>
-  // ── Configuración de Supabase ─────────────────────────────────────────
-  // Reemplaza estos 3 valores con los de tu proyecto de Supabase.
-  // Los encuentras en: Supabase → Settings → API
-  const SUPABASE_URL = 'https://mehwuyolvfjvmlobcsms.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1laHd1eW9sdmZqdm1sb2Jjc21zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1NzcyNDEsImV4cCI6MjA5MzE1MzI0MX0.dmZ7OQnQ_VjCIXVguFpvU55L8_JMctGpIqshmudPrE0';
+  // ── Configuración ────────────────────────────────────────────────────
+  // El widget habla con /api/data (función serverless en este mismo
+  // proyecto de Vercel), que conecta directo a Postgres — ya no pasa por
+  // la REST API pública de Supabase.
   const USUARIO_ID_DEFECTO = 1;
   // ─────────────────────────────────────────────────────────────────────
-
-  const headersBase = {
-    'apikey': SUPABASE_ANON_KEY,
-    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json',
-  };
 
   const $ = (id) => document.getElementById(id);
   const mensajeEl = $('mensaje');
@@ -315,76 +308,71 @@
     $('msi-meses').classList.toggle('oculto', !$('usar-msi').checked);
   });
 
-  async function cargarCategorias(tipo) {
-    const selectCategoria = $('categoria');
-    selectCategoria.innerHTML = '<option value="">Cargando...</option>';
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/categoria?select=id,nombre,icono&tipo=eq.${tipo}&activa=eq.1&order=nombre`,
-      { headers: headersBase }
-    );
-    if (!res.ok) throw new Error('No se pudieron cargar las categorías.');
-    const categorias = await res.json();
-    selectCategoria.innerHTML = categorias
+  async function pedirDatos(usuarioId, tipo) {
+    const res = await fetch(`/api/data?usuario_id=${usuarioId}&tipo=${tipo}`);
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => ({}));
+      throw new Error(cuerpo.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  function poblarUsuarios(usuarios) {
+    const selectUsuario = $('usuario');
+    selectUsuario.innerHTML = usuarios
+      .map((u) => `<option value="${u.id}">${u.nombre}</option>`)
+      .join('') || '<option value="">Sin usuarios</option>';
+    if (usuarios.some((u) => u.id === USUARIO_ID_DEFECTO)) {
+      selectUsuario.value = String(USUARIO_ID_DEFECTO);
+    }
+  }
+
+  function poblarCategorias(categorias) {
+    $('categoria').innerHTML = categorias
       .map((c) => `<option value="${c.id}">${c.icono || '📦'} ${c.nombre}</option>`)
       .join('') || '<option value="">Sin categorías</option>';
   }
 
-  async function cargarMedios(usuarioId) {
-    const selectMedio = $('medio');
-    selectMedio.innerHTML = '<option value="">Cargando...</option>';
-    const [cuentasRes, tarjetasRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/cuenta?select=id,nombre&usuario_id=eq.${usuarioId}&activa=eq.1&order=nombre`, { headers: headersBase }),
-      fetch(`${SUPABASE_URL}/rest/v1/tarjeta_credito?select=id,nombre,banco&usuario_id=eq.${usuarioId}&activa=eq.1&order=nombre`, { headers: headersBase }),
-    ]);
-    if (!cuentasRes.ok || !tarjetasRes.ok) throw new Error('No se pudieron cargar las cuentas/tarjetas.');
-    const cuentas = await cuentasRes.json();
-    const tarjetas = await tarjetasRes.json();
+  function poblarMedios(cuentas, tarjetas) {
     const opcionesCuentas = cuentas
       .map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`)
       .join('');
     const opcionesTarjetas = tarjetas
       .map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`)
       .join('');
-    selectMedio.innerHTML = opcionesCuentas + opcionesTarjetas || '<option value="">Sin cuentas/tarjetas</option>';
+    $('medio').innerHTML = opcionesCuentas + opcionesTarjetas || '<option value="">Sin cuentas/tarjetas</option>';
     actualizarVisibilidadMsi();
   }
 
-  async function cargarDatos() {
+  async function refrescarDependientes() {
     try {
-      const usuariosRes = await fetch(`${SUPABASE_URL}/rest/v1/usuario?select=id,nombre&order=id`, { headers: headersBase });
-      if (!usuariosRes.ok) throw new Error('No se pudieron cargar los usuarios.');
-      const usuarios = await usuariosRes.json();
+      const datos = await pedirDatos($('usuario').value, $('tipo').value);
+      poblarCategorias(datos.categorias);
+      poblarMedios(datos.cuentas, datos.tarjetas);
+    } catch (err) {
+      mostrarMensaje('❌ Error al recargar datos: ' + err.message, 'error');
+    }
+  }
 
-      const selectUsuario = $('usuario');
-      selectUsuario.innerHTML = usuarios
-        .map((u) => `<option value="${u.id}">${u.nombre}</option>`)
-        .join('') || '<option value="">Sin usuarios</option>';
-      if (usuarios.some((u) => u.id === USUARIO_ID_DEFECTO)) {
-        selectUsuario.value = String(USUARIO_ID_DEFECTO);
+  async function cargarInicial() {
+    try {
+      const datos = await pedirDatos(USUARIO_ID_DEFECTO, $('tipo').value);
+      poblarUsuarios(datos.usuarios);
+      if ($('usuario').value === String(USUARIO_ID_DEFECTO)) {
+        poblarCategorias(datos.categorias);
+        poblarMedios(datos.cuentas, datos.tarjetas);
+      } else {
+        await refrescarDependientes();
       }
-
-      await Promise.all([
-        cargarCategorias($('tipo').value),
-        cargarMedios(selectUsuario.value),
-      ]);
     } catch (err) {
       mostrarMensaje('❌ Error al cargar datos: ' + err.message, 'error');
     }
   }
 
-  $('usuario').addEventListener('change', () => {
-    cargarMedios($('usuario').value).catch(
-      (err) => mostrarMensaje('❌ Error al cargar cuentas/tarjetas: ' + err.message, 'error')
-    );
-  });
+  $('usuario').addEventListener('change', refrescarDependientes);
+  $('tipo').addEventListener('change', refrescarDependientes);
 
-  $('tipo').addEventListener('change', () => {
-    cargarCategorias($('tipo').value).catch(
-      (err) => mostrarMensaje('❌ Error al cargar categorías: ' + err.message, 'error')
-    );
-  });
-
-  cargarDatos();
+  cargarInicial();
 
   $('form-gasto').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -427,15 +415,15 @@
     btnGuardar.textContent = 'Guardando...';
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/transaccion`, {
+      const res = await fetch('/api/data', {
         method: 'POST',
-        headers: { ...headersBase, 'Prefer': 'return=minimal' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
-        const detalle = await res.text();
-        throw new Error(detalle || `HTTP ${res.status}`);
+        const cuerpo = await res.json().catch(() => ({}));
+        throw new Error(cuerpo.error || `HTTP ${res.status}`);
       }
 
       mostrarMensaje('✅ ¡Gasto guardado con éxito!', 'exito');
@@ -445,8 +433,7 @@
       $('usuario').value = usuarioAntes;
       $('tipo').value = 'gasto';
       document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
-      await cargarCategorias('gasto');
-      actualizarVisibilidadMsi();
+      await refrescarDependientes();
     } catch (err) {
       mostrarMensaje('❌ Error al guardar: ' + err.message, 'error');
     } finally {
