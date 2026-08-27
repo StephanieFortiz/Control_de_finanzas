@@ -173,6 +173,59 @@ Debe regresar un JSON con `usuarios`, `categorias`, `cuentas` y `tarjetas`. Si d
 
 ---
 
+## Módulo 2: Transacciones completo (historial, editar, borrar, abonar)
+
+Primer módulo migrado de Streamlit a HTML/JS + serverless, según el plan de migración
+acordado. Vive en `widget/app/transacciones.html`. El widget de captura rápida
+(`widget/index.html`) no cambió — sigue público, sin login, para tu novio.
+
+Esta página sí necesita login porque expone el historial completo de transacciones,
+no solo un formulario de captura.
+
+### Variables de entorno nuevas en Vercel
+
+```powershell
+cd C:\Users\steph\Finanzas\widget
+vercel env add APP_PASSWORD production
+vercel env add SESSION_SECRET production
+```
+
+- `APP_PASSWORD`: la contraseña compartida para entrar (elige una, cualquiera de los dos la usa).
+- `SESSION_SECRET`: una cadena aleatoria larga, solo para firmar la sesión — no es una contraseña que alguien escriba, genera una así y pégala tal cual:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### Desplegar
+
+```powershell
+vercel --prod
+```
+
+### URLs
+
+- `https://fin-oscap.vercel.app/login.html` — pantalla de login.
+- `https://fin-oscap.vercel.app/app/transacciones.html` — el módulo nuevo (te pide login si no tienes sesión).
+
+### Qué cubre y qué no (todavía)
+
+- ✅ Nueva transacción (con préstamo/apoyo opcional, igual que el widget).
+- ✅ Historial con los mismos filtros que Streamlit: usuario, mes, categoría, cuenta, tarjeta, orden.
+- ✅ Editar y borrar una transacción.
+- ✅ Ver el tag de "💸 Préstamo · resta $X" y registrar un abono ahí mismo.
+- ⏸️ Dashboard, Tarjetas, Préstamos (vista completa) y Configuración siguen solo en Streamlit — el link de arriba de la página los abre en pestaña nueva mientras se migran.
+- ⏸️ Simplificaciones respecto a Streamlit: el modo "Porcentaje" del monto de préstamo no está (solo Completo/Mitad/fijo), y el abono no incluye el selector de "Mes MSI" (queda como abono libre). Si los usas seguido, dime y los agrego.
+
+### Testing de este módulo
+
+1. Ve a `/login.html`, entra con `APP_PASSWORD`.
+2. En Transacciones: crea una de prueba, edítala, bórrala, y si tienes un préstamo pendiente, ábonale desde el tag — confirma en Streamlit (🤝 Préstamos) que el `monto_pendiente` bajó.
+3. Prueba con una tarjeta que tenga MSI activo: crea un cargo a 3 meses, cambia el filtro de "Mes" al mes siguiente y confirma que aparece la mensualidad proyectada con el tag `MSI`.
+4. Cierra sesión borrando la cookie del navegador (o en incógnito) y confirma que `/app/transacciones.html` te manda a `/login.html`.
+
+---
+
 ## Velocidades esperadas
 
 | | Antes | Después |
