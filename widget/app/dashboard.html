@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Finanzas</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #eef4f6;
+    color: #133a4f;
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1e5f8c, #0f8080);
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 1.1rem; }
+  nav a { color: #eaf6f6; text-decoration: none; font-size: 0.85rem; margin-left: 16px; }
+  nav a.activo { font-weight: 700; text-decoration: underline; }
+
+  main { max-width: 1000px; margin: 20px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 20px; }
+
+  .card { background: #ffffff; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); padding: 20px; }
+
+  label { display: block; font-size: 0.78rem; font-weight: 600; color: #35606f; margin: 0 0 5px; }
+  select {
+    padding: 9px 12px; border: 2px solid #e1ecef; border-radius: 8px; font-size: 0.9rem;
+    color: #133a4f; background: #f9fcfd;
+  }
+  select:focus { outline: none; border-color: #0f8080; background: #fff; }
+
+  .barra-superior { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .barra-superior > div { min-width: 160px; }
+
+  h2.titulo-mes { font-size: 1.05rem; margin: 4px 0 0; }
+  h3.subtitulo { font-size: 0.95rem; margin-bottom: 12px; }
+
+  .metricas { display: flex; gap: 12px; flex-wrap: wrap; }
+  .metrica { flex: 1; min-width: 150px; background: #f8f7f4; border-radius: 10px; padding: 14px 16px; }
+  .metrica .valor { font-size: 1.3rem; font-weight: 700; }
+  .metrica .etiqueta { font-size: 0.75rem; color: #6b8794; }
+  .metrica .delta { font-size: 0.72rem; margin-top: 2px; }
+
+  .tarjetas-gauges { display: flex; gap: 16px; flex-wrap: wrap; }
+  .gauge-item { flex: 1; min-width: 200px; max-width: 240px; text-align: center; }
+  .gauge-item .chart { width: 100%; height: 160px; }
+  .gauge-item .info { font-size: 0.75rem; margin-top: -6px; }
+  .gauge-item .info .gris { color: gray; }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip {
+    padding: 6px 14px; border-radius: 999px; border: 2px solid #cfe6e6; background: #eefaf9;
+    color: #0f8080; font-size: 0.8rem; font-weight: 600; cursor: pointer; user-select: none;
+  }
+  .chip.activo { background: #0f8080; color: #fff; border-color: #0f8080; }
+
+  .grid-mitad { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid-mitad { grid-template-columns: 1fr; } }
+
+  .chart-grande { width: 100%; height: 300px; }
+  .chart-alto { width: 100%; height: 440px; }
+
+  .categoria-detalle { margin-top: 4px; max-height: 400px; overflow-y: auto; }
+  .cat-resumen {
+    width: 100%; text-align: left; padding: 8px 10px; background: #f8fbfc; border: none;
+    border-radius: 8px; margin-top: 6px; cursor: pointer; font-size: 0.85rem;
+  }
+  .cat-cuerpo { padding: 4px 6px; }
+  .cat-tx-fila {
+    display: flex; justify-content: space-between; align-items: center; padding: 4px 0;
+    border-bottom: 1px solid #f0f0f0; font-size: 0.78rem;
+  }
+  .cat-tx-monto { color: #E24B4A; font-weight: 500; white-space: nowrap; }
+  .cat-tx-tarjeta { color: #aaa; font-size: 0.7rem; margin-left: 6px; }
+  .oculto { display: none !important; }
+
+  .vacio { color: #888; font-size: 0.88rem; padding: 14px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💳 Finanzas</h1>
+  <nav>
+    <a href="/app/transacciones.html">📋 Transacciones</a>
+    <a href="/app/prestamos.html">🤝 Préstamos</a>
+    <a href="/app/tarjetas.html">💳 Tarjetas</a>
+    <a href="/app/configuracion.html">⚙️ Configuración</a>
+    <a href="#" class="activo">📊 Dashboard</a>
+  </nav>
+</header>
+
+<main>
+  <section class="card">
+    <div class="barra-superior">
+      <div>
+        <label for="viendo-como">Viendo como</label>
+        <select id="viendo-como"></select>
+      </div>
+      <div>
+        <label for="f-mes">Mes</label>
+        <select id="f-mes"></select>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="seccion-metricas">
+    <h2 class="titulo-mes" id="titulo-mes"></h2>
+    <div class="metricas" id="metricas" style="margin-top:12px"></div>
+  </section>
+
+  <section class="card" id="seccion-tarjetas">
+    <h3 class="subtitulo">💳 Estado de tarjetas</h3>
+    <div class="tarjetas-gauges" id="tarjetas-gauges"></div>
+  </section>
+
+  <section class="card oculto" id="seccion-analisis-tarjeta">
+    <h3 class="subtitulo">🃏 Análisis por tarjeta</h3>
+    <div class="chips" id="chips-tarjeta"></div>
+    <div class="grid-mitad">
+      <div><div class="chart-grande" id="chart-pie-tarjeta"></div></div>
+      <div><div class="chart-grande" id="chart-barras-tarjeta"></div></div>
+    </div>
+  </section>
+
+  <section class="card" id="seccion-categoria">
+    <h3 class="subtitulo">📂 Gastos por categoría</h3>
+    <div class="grid-mitad">
+      <div class="chart-grande" id="chart-categoria"></div>
+      <div class="categoria-detalle" id="detalle-categoria"></div>
+    </div>
+  </section>
+
+  <section class="card" id="seccion-promedio">
+    <h3 class="subtitulo" id="titulo-promedio">📐 Promedio mensual de gasto por categoría</h3>
+    <div class="chips" id="chips-categoria"></div>
+    <div class="metrica" style="max-width:260px; margin-bottom:14px">
+      <div class="valor" id="promedio-total">$0.00</div>
+      <div class="etiqueta">💰 Promedio mensual total</div>
+    </div>
+    <div class="chart-alto" id="chart-promedio"></div>
+  </section>
+
+  <section class="card" id="seccion-anio">
+    <h3 class="subtitulo" id="titulo-anio">🗓️ Gastos por categoría y mes</h3>
+    <div class="chart-alto" id="chart-anio"></div>
+  </section>
+</main>
+
+<script src="/app/vendor/echarts.min.js"></script>
+<script src="/app/_shared.js"></script>
+<script src="/app/dashboard.js"></script>
+</body>
+</html>

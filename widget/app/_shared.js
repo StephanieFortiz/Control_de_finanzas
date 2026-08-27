@@ -45,6 +45,15 @@ function calcularFechaPago(fechaCorteIso, diaPago) {
   return `${String(anioPago).padStart(4, '0')}-${String(mesPago).padStart(2, '0')}-${String(Math.min(diaPago, ultimoDiaDeMes(anioPago, mesPago))).padStart(2, '0')}`;
 }
 
+// Port de utils/dashboard.py:_monto_efectivo — para recalcular en el cliente
+// cuando los filtros de tarjeta/categoría cambian sin pedir datos de nuevo.
+function montoEfectivo(t) {
+  if ((t.meses_sin_intereses || 0) > 0 && !t.es_proyeccion) {
+    return t.monto_por_mes || t.monto;
+  }
+  return t.monto;
+}
+
 // "Viendo como" — quién está usando la app, persistido entre visitas.
 // Compartido entre páginas de widget/app/ vía localStorage.
 const CLAVE_USUARIO_ACTIVO = 'finanzas_usuario_activo';

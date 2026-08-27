@@ -298,7 +298,7 @@ Cuarto módulo migrado. Vive en `widget/app/configuracion.html` — mismas varia
 de entorno y login, no necesitas configurar nada nuevo. Es el módulo más simple
 (CRUD directo, sin lógica de fechas ni cálculos financieros).
 
-Con este módulo, **solo Dashboard queda en Streamlit**.
+Con este módulo, Dashboard era lo único que quedaba en Streamlit — ver Módulo 6.
 
 ### URL
 
@@ -316,6 +316,50 @@ Con este módulo, **solo Dashboard queda en Streamlit**.
 1. Edita una cuenta o tarjeta (cambia el nombre o desactívala) y confirma en Streamlit que el cambio se refleja.
 2. Crea una categoría de prueba, confirma que aparece en el selector de categorías al crear una transacción nueva.
 3. Marca "Mostrar categorías desactivadas" y confirma que aparecen las inactivas.
+
+---
+
+## Módulo 6: Dashboard completo (último módulo — migración terminada)
+
+Con este módulo, **toda la app vive en Vercel** — `finanzas-os.streamlit.app` ya no
+hace falta para el uso diario (queda como respaldo si algún día se quiere consultar).
+
+Es el módulo con más gráficas: 6 en total (medidores de tarjeta, pastel, barras
+simples, agrupadas y apiladas). Se usó **Apache ECharts** en vez de Plotly —
+auto-hospedado en `widget/app/vendor/echarts.min.js` (sin CDN externo, para no
+repetir el problema que tuvimos con la caída de Supabase). No requiere variables de
+entorno nuevas ni configuración adicional en Vercel.
+
+### URL
+
+- `https://fin-oscap.vercel.app/app/dashboard.html`
+
+### Qué trae
+
+- ✅ Selector de mes (13 meses: el actual, uno adelante, y 11 atrás) y "Viendo como" compartido con el resto de los módulos.
+- ✅ Métricas del mes: Ingresos, Gastos, Ahorro (con % del ingreso), Cargos.
+- ✅ Estado de tarjetas: un medidor por tarjeta con zonas de color (verde/amarillo/rojo) y días para el pago.
+- ✅ Análisis por tarjeta: pastel de cargos por tarjeta + barras de categoría por tarjeta, con chips para filtrar (afectan también la sección de "Gastos por categoría", igual que en Streamlit).
+- ✅ Gastos por categoría: barra + lista expandible con el detalle de cada transacción.
+- ✅ Promedio mensual por categoría (año a la fecha), con chips de filtro propios.
+- ✅ Gastos por categoría y mes (año completo), barra apilada.
+
+**Verificación exhaustiva antes de subir:** un script comparó, transacción por
+transacción, la salida completa de `widget/api/dashboard.js` contra la misma lógica
+corrida directamente en Python (usando `utils/calculos.py`) para 4 combinaciones
+distintas de usuario/mes con datos reales tuyos (incluyendo meses con proyecciones
+MSI) — 0 diferencias en todos los casos.
+
+Simplificación deliberada: el medidor de tarjeta no dibuja la rayita de threshold en
+85% que sí tiene la versión de Plotly — las zonas de color y el número ya comunican
+lo mismo. Si la extrañas, se puede agregar después.
+
+### Testing de este módulo
+
+1. Compara las métricas del mes actual, cifra por cifra, contra Streamlit.
+2. Cambia el selector de mes a uno con cargos MSI y confirma que el total y las gráficas coinciden con Streamlit para ese mismo mes.
+3. Prueba los chips de filtro por tarjeta y por categoría — no deben tardar (no piden datos nuevos al servidor, recalculan en el navegador).
+4. Compara al menos una gráfica de cada tipo (medidor, pastel, barra simple, agrupada, apilada) contra su equivalente en Streamlit.
 
 ---
 
