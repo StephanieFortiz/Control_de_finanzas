@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tarjetas — Finanzas</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #eef4f6;
+    color: #133a4f;
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1e5f8c, #0f8080);
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 1.1rem; }
+  nav a { color: #eaf6f6; text-decoration: none; font-size: 0.85rem; margin-left: 16px; }
+  nav a.activo { font-weight: 700; text-decoration: underline; }
+
+  main {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .card {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    padding: 20px;
+  }
+
+  label { display: block; font-size: 0.78rem; font-weight: 600; color: #35606f; margin: 0 0 5px; }
+  select {
+    width: 100%; padding: 10px 12px; border: 2px solid #e1ecef; border-radius: 10px;
+    font-size: 0.95rem; color: #133a4f; background: #f9fcfd;
+  }
+  select:focus { outline: none; border-color: #0f8080; background: #fff; }
+
+  .barra-superior { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px; }
+  .barra-superior > div { flex: 1; min-width: 160px; }
+
+  .tabs-tarjeta { display: flex; gap: 8px; margin: 14px 0; border-bottom: 2px solid #eef2f3; flex-wrap: wrap; }
+  .tab-tarjeta-btn {
+    padding: 8px 16px; border: none; background: none; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; color: #6b8794; border-bottom: 3px solid transparent;
+  }
+  .tab-tarjeta-btn.activo { color: #0f8080; border-bottom-color: #0f8080; }
+
+  .encabezado-flex { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  .encabezado-info .banco { font-weight: 600; }
+  .encabezado-info .periodo { font-size: 0.8rem; color: gray; margin-top: 2px; }
+  .encabezado-alerta { text-align: right; font-size: 0.85rem; font-weight: 600; }
+  .encabezado-alerta .fecha-pago { font-size: 0.72rem; color: gray; font-weight: 400; }
+
+  .metricas { display: flex; gap: 12px; margin: 16px 0 6px; flex-wrap: wrap; }
+  .metrica { flex: 1; min-width: 130px; background: #f8f7f4; border-radius: 10px; padding: 12px 14px; }
+  .metrica .valor { font-size: 1.15rem; font-weight: 700; }
+  .metrica .etiqueta { font-size: 0.72rem; color: #6b8794; }
+
+  .barra-limite { background: #eee; border-radius: 6px; height: 8px; margin: 6px 0 16px; }
+  .barra-limite > div { height: 8px; border-radius: 6px; }
+
+  h3.subtitulo { font-size: 0.95rem; margin: 18px 0 8px; }
+
+  .cargo-fila { padding: 8px 0; border-bottom: 1px solid #eef2f3; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .cargo-info { flex: 2; min-width: 200px; }
+  .cargo-desc { font-size: 0.9rem; }
+  .cargo-nota { font-size: 0.72rem; color: #888; margin-top: 2px; }
+  .tag-msi { background: #EAF3DE; color: #27500A; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  .tag-msi-proj { background: #E6F1FB; color: #0C447C; font-size: 10px; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+  .cargo-monto { text-align: right; color: #E24B4A; font-weight: 500; white-space: nowrap; }
+  .cargo-monto .total { font-size: 11px; color: gray; font-weight: 400; }
+  .cargo-fecha { font-size: 0.75rem; color: gray; white-space: nowrap; }
+  .cargo-acciones button { border: none; background: none; cursor: pointer; font-size: 0.95rem; }
+
+  .tag-prestamo { display: inline-block; background: #E6F1FB; color: #0C447C; font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-top: 4px; }
+  .btn-abonar-tar { font-size: 0.75rem; margin-left: 8px; padding: 3px 10px; border-radius: 6px; border: 1px solid #0C447C; background: #fff; color: #0C447C; cursor: pointer; }
+
+  .grupo-header {
+    width: 100%; text-align: left; padding: 10px 12px; background: #f8fbfc; border: none;
+    border-radius: 8px; margin-top: 8px; cursor: pointer; font-size: 0.85rem;
+  }
+  .grupo-cuerpo { padding: 4px 4px 8px; }
+  .oculto { display: none !important; }
+
+  .caja-ajuste, .caja-abono {
+    border-left: 3px solid #378ADD; padding: 10px 12px 4px; margin: 6px 0; background: #f8fbfc; border-radius: 0 8px 8px 0;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  input { padding: 9px 11px; border: 2px solid #e1ecef; border-radius: 8px; font-size: 0.88rem; width: 100%; }
+  .btn-primario {
+    padding: 9px 14px; border: none; border-radius: 8px; background: linear-gradient(135deg, #1e5f8c, #0f8080);
+    color: #fff; font-size: 0.82rem; font-weight: 700; cursor: pointer; margin-top: 10px;
+  }
+  .btn-secundario {
+    padding: 9px 14px; border: 2px solid #cfe6e6; border-radius: 8px; background: #fff;
+    color: #35606f; font-size: 0.82rem; font-weight: 600; cursor: pointer; margin-top: 10px;
+  }
+  .mensaje { margin-top: 8px; padding: 6px 10px; border-radius: 8px; font-size: 0.78rem; font-weight: 600; display: none; }
+  .mensaje.error { display: block; background: #fdecec; color: #b3261e; border: 2px solid #f5b8b4; }
+
+  .vacio { color: #888; font-size: 0.88rem; padding: 14px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💳 Finanzas</h1>
+  <nav>
+    <a href="/app/transacciones.html">📋 Transacciones</a>
+    <a href="/app/prestamos.html">🤝 Préstamos</a>
+    <a href="#" class="activo">💳 Tarjetas</a>
+    <a href="https://finanzas-os.streamlit.app" target="_blank" rel="noopener">
+      Dashboard · Configuración (app clásica) ↗
+    </a>
+  </nav>
+</header>
+
+<main>
+  <section class="card">
+    <div class="barra-superior">
+      <div>
+        <label for="viendo-como">Viendo como</label>
+        <select id="viendo-como"></select>
+      </div>
+    </div>
+
+    <div class="tabs-tarjeta" id="tabs-tarjeta"></div>
+    <div id="contenido-tarjeta"></div>
+  </section>
+</main>
+
+<script src="/app/_shared.js"></script>
+<script src="/app/tarjetas.js"></script>
+</body>
+</html>

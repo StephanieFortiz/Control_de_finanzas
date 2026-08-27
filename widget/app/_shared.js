@@ -33,6 +33,18 @@ function fechaMasNMeses(fechaIso, n) {
   return `${String(anioNuevo).padStart(4, '0')}-${String(mesNuevo).padStart(2, '0')}-${String(diaNuevo).padStart(2, '0')}`;
 }
 
+// Port de utils/calculos.py:calcular_fecha_pago — ver widget/api/_calculos.js
+// para la versión de servidor y las pruebas contra el original en Python.
+function calcularFechaPago(fechaCorteIso, diaPago) {
+  const [anio, mes, dia] = fechaCorteIso.split('-').map(Number);
+  if (diaPago > dia) {
+    return `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(Math.min(diaPago, ultimoDiaDeMes(anio, mes))).padStart(2, '0')}`;
+  }
+  let anioPago = anio, mesPago = mes + 1;
+  if (mesPago === 13) { anioPago += 1; mesPago = 1; }
+  return `${String(anioPago).padStart(4, '0')}-${String(mesPago).padStart(2, '0')}-${String(Math.min(diaPago, ultimoDiaDeMes(anioPago, mesPago))).padStart(2, '0')}`;
+}
+
 // "Viendo como" — quién está usando la app, persistido entre visitas.
 // Compartido entre páginas de widget/app/ vía localStorage.
 const CLAVE_USUARIO_ACTIVO = 'finanzas_usuario_activo';

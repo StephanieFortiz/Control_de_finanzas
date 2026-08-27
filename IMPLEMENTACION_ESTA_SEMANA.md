@@ -257,6 +257,41 @@ variables de entorno y login que el Módulo 2, no necesitas configurar nada nuev
 
 ---
 
+## Módulo 4: Tarjetas completo (estado de cuenta, historial por período, ajustes MSI)
+
+Tercer módulo migrado. Vive en `widget/app/tarjetas.html` — mismas variables de
+entorno y login, no necesitas configurar nada nuevo.
+
+Este fue el módulo con la lógica de fechas más delicada (ciclos de corte/pago,
+proyecciones de MSI ligadas al día de corte de cada tarjeta) — toda esa lógica de
+`utils/calculos.py` se portó a `widget/api/_calculos.js` y se verificó función por
+función contra el Python original con un script comparador, incluyendo casos límite
+(fin de mes, cambio de año). También se probó contra tus datos reales de producción
+(tu tarjeta con el cargo de "Seguro de auto" a 12 MSI, entre otros) antes de subir el
+código, así que ya está validado contra un caso real, no solo sintético.
+
+### URL
+
+- `https://fin-oscap.vercel.app/app/tarjetas.html`
+
+### Qué trae
+
+- ✅ Una pestaña por tarjeta, con el mismo resumen que Streamlit: total del período, límite disponible, % usado, días para corte, alerta de días para pago.
+- ✅ "Cargos en [mes]" con los mismos tags de MSI y de préstamo que ya conoces.
+- ✅ Historial de estados de cuenta anteriores, expandible por período.
+- ✅ Ajustar el monto de una mensualidad MSI proyectada (para cuando el banco cobra un poco distinto al redondeo).
+- ✅ Abonar a un préstamo ligado a un cargo de tarjeta, igual que en Transacciones.
+- ✅ Selector "Viendo como" compartido con Préstamos (recuerda tu elección).
+
+### Testing de este módulo
+
+1. Entra a `/app/tarjetas.html`, revisa que el período actual y el total coincidan con Streamlit para la misma tarjeta.
+2. Abre el historial y confirma que los meses con cargos a MSI muestran la mensualidad correcta (compáralo contra la pestaña Tarjetas de Streamlit).
+3. Ajusta el monto de una mensualidad proyectada y confirma que el cambio se refleja de inmediato.
+4. Si tienes un cargo con préstamo ligado, ábonalo desde aquí y confirma en Streamlit que el préstamo se actualizó.
+
+---
+
 ## Velocidades esperadas
 
 | | Antes | Después |
