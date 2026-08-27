@@ -292,6 +292,33 @@ código, así que ya está validado contra un caso real, no solo sintético.
 
 ---
 
+## Módulo 5: Configuración completo (perfiles, cuentas, tarjetas, categorías)
+
+Cuarto módulo migrado. Vive en `widget/app/configuracion.html` — mismas variables
+de entorno y login, no necesitas configurar nada nuevo. Es el módulo más simple
+(CRUD directo, sin lógica de fechas ni cálculos financieros).
+
+Con este módulo, **solo Dashboard queda en Streamlit**.
+
+### URL
+
+- `https://fin-oscap.vercel.app/app/configuracion.html`
+
+### Qué trae
+
+- ✅ Perfiles: ver los perfiles existentes, crear el segundo si falta (igual que Streamlit, no deja editar/borrar perfiles existentes — tampoco se puede en la app clásica).
+- ✅ Cuentas: listar todas (activas e inactivas), editar, agregar nuevas.
+- ✅ Tarjetas: listar todas, editar (incluyendo día de corte/pago y límite), agregar nuevas.
+- ✅ Categorías: listar (con opción de ver las desactivadas), editar con vista previa de color/ícono, crear nuevas.
+
+### Testing de este módulo
+
+1. Edita una cuenta o tarjeta (cambia el nombre o desactívala) y confirma en Streamlit que el cambio se refleja.
+2. Crea una categoría de prueba, confirma que aparece en el selector de categorías al crear una transacción nueva.
+3. Marca "Mostrar categorías desactivadas" y confirma que aparecen las inactivas.
+
+---
+
 ## Velocidades esperadas
 
 | | Antes | Después |

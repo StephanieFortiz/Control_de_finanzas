@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración — Finanzas</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #eef4f6;
+    color: #133a4f;
+    min-height: 100vh;
+    padding-bottom: 60px;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1e5f8c, #0f8080);
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 { font-size: 1.1rem; }
+  nav a { color: #eaf6f6; text-decoration: none; font-size: 0.85rem; margin-left: 16px; }
+  nav a.activo { font-weight: 700; text-decoration: underline; }
+
+  main { max-width: 900px; margin: 20px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 20px; }
+
+  .card { background: #ffffff; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); padding: 20px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid #eef2f3; flex-wrap: wrap; }
+  .tab-btn {
+    padding: 8px 16px; border: none; background: none; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; color: #6b8794; border-bottom: 3px solid transparent;
+  }
+  .tab-btn.activo { color: #0f8080; border-bottom-color: #0f8080; }
+  .oculto { display: none !important; }
+
+  h3.subtitulo { font-size: 0.95rem; margin-bottom: 10px; }
+
+  label { display: block; font-size: 0.78rem; font-weight: 600; color: #35606f; margin: 8px 0 4px; }
+  input, select { width: 100%; padding: 9px 11px; border: 2px solid #e1ecef; border-radius: 8px; font-size: 0.88rem; color: #133a4f; background: #f9fcfd; }
+  input:focus, select:focus { outline: none; border-color: #0f8080; background: #fff; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  .perfiles-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .perfil-badge { border-radius: 8px; padding: 10px 16px; font-weight: 700; border-left: 4px solid; }
+
+  .fila-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eef2f3; flex-wrap: wrap; }
+  .fila-info { font-size: 0.88rem; }
+  .fila-info .sub { color: gray; font-size: 0.78rem; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 4px; margin-left: 6px; }
+  .badge.activa { background: #EAF3DE; color: #27500A; }
+  .badge.inactiva { background: #F1EFE8; color: #5F5E5A; }
+  .btn-editar { border: none; background: none; cursor: pointer; font-size: 0.85rem; color: #0f8080; font-weight: 600; }
+
+  .caja-form { border-left: 3px solid #378ADD; padding: 12px 14px 6px; margin: 6px 0 10px; background: #f8fbfc; border-radius: 0 8px 8px 0; width: 100%; }
+  .caja-agregar { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #ddd; }
+  .btn-toggle-agregar { background: none; border: none; color: #0f8080; font-weight: 600; font-size: 0.88rem; cursor: pointer; }
+
+  .checkbox-linea { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 0.85rem; }
+  .checkbox-linea input { width: auto; }
+
+  .btn-primario {
+    padding: 9px 16px; border: none; border-radius: 8px; background: linear-gradient(135deg, #1e5f8c, #0f8080);
+    color: #fff; font-size: 0.85rem; font-weight: 700; cursor: pointer; margin-top: 12px;
+  }
+  .btn-secundario {
+    padding: 9px 16px; border: 2px solid #cfe6e6; border-radius: 8px; background: #fff;
+    color: #35606f; font-size: 0.85rem; font-weight: 600; cursor: pointer; margin-top: 12px;
+  }
+  .mensaje { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; display: none; }
+  .mensaje.error { display: block; background: #fdecec; color: #b3261e; border: 2px solid #f5b8b4; }
+  .mensaje.exito { display: block; background: #e3f7ee; color: #157a4b; border: 2px solid #a9e6c9; }
+
+  .vista-previa { border-radius: 6px; padding: 8px; margin-top: 6px; border-left: 3px solid; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>💳 Finanzas</h1>
+  <nav>
+    <a href="/app/transacciones.html">📋 Transacciones</a>
+    <a href="/app/prestamos.html">🤝 Préstamos</a>
+    <a href="/app/tarjetas.html">💳 Tarjetas</a>
+    <a href="#" class="activo">⚙️ Configuración</a>
+    <a href="https://finanzas-os.streamlit.app" target="_blank" rel="noopener">Dashboard (app clásica) ↗</a>
+  </nav>
+</header>
+
+<main>
+  <section class="card">
+    <div class="tabs">
+      <button type="button" class="tab-btn activo" data-tab="perfiles">👤 Perfiles</button>
+      <button type="button" class="tab-btn" data-tab="cuentas">🏦 Cuentas</button>
+      <button type="button" class="tab-btn" data-tab="tarjetas">💳 Tarjetas</button>
+      <button type="button" class="tab-btn" data-tab="categorias">🏷️ Categorías</button>
+    </div>
+
+    <div id="tab-perfiles">
+      <h3 class="subtitulo">Perfiles de usuario</h3>
+      <div class="perfiles-grid" id="perfiles-grid"></div>
+      <div id="perfiles-form-zona"></div>
+    </div>
+
+    <div id="tab-cuentas" class="oculto">
+      <h3 class="subtitulo">Cuentas bancarias</h3>
+      <div id="lista-cuentas"></div>
+      <div class="caja-agregar">
+        <button type="button" class="btn-toggle-agregar" id="toggle-agregar-cuenta">➕ Agregar cuenta</button>
+        <div id="form-agregar-cuenta"></div>
+      </div>
+    </div>
+
+    <div id="tab-tarjetas" class="oculto">
+      <h3 class="subtitulo">Tarjetas de crédito</h3>
+      <div id="lista-tarjetas"></div>
+      <div class="caja-agregar">
+        <button type="button" class="btn-toggle-agregar" id="toggle-agregar-tarjeta">➕ Agregar tarjeta</button>
+        <div id="form-agregar-tarjeta"></div>
+      </div>
+    </div>
+
+    <div id="tab-categorias" class="oculto">
+      <h3 class="subtitulo">Categorías</h3>
+      <label class="checkbox-linea"><input type="checkbox" id="mostrar-inactivas"> Mostrar categorías desactivadas</label>
+      <div id="lista-categorias"></div>
+      <div class="caja-agregar">
+        <button type="button" class="btn-toggle-agregar" id="toggle-agregar-categoria">➕ Crear categoría propia</button>
+        <div id="form-agregar-categoria"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/app/_shared.js"></script>
+<script src="/app/configuracion.js"></script>
+</body>
+</html>
