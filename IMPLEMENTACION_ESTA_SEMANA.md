@@ -218,7 +218,7 @@ vercel --prod
 - ✅ Historial con los mismos filtros que Streamlit: usuario, mes, categoría, cuenta, tarjeta, orden.
 - ✅ Editar y borrar una transacción.
 - ✅ Ver el tag de "💸 Préstamo · resta $X" y registrar un abono ahí mismo.
-- ⏸️ Dashboard, Tarjetas, Préstamos (vista completa) y Configuración siguen solo en Streamlit — el link de arriba de la página los abre en pestaña nueva mientras se migran.
+- ⏸️ Dashboard, Tarjetas y Configuración siguen solo en Streamlit — el link de arriba de la página los abre en pestaña nueva mientras se migran.
 - ⏸️ Simplificaciones respecto a Streamlit: el modo "Porcentaje" del monto de préstamo no está (solo Completo/Mitad/fijo), y el abono no incluye el selector de "Mes MSI" (queda como abono libre). Si los usas seguido, dime y los agrego.
 
 ### Testing de este módulo
@@ -227,6 +227,33 @@ vercel --prod
 2. En Transacciones: crea una de prueba, edítala, bórrala, y si tienes un préstamo pendiente, ábonale desde el tag — confirma en Streamlit (🤝 Préstamos) que el `monto_pendiente` bajó.
 3. Prueba con una tarjeta que tenga MSI activo: crea un cargo a 3 meses, cambia el filtro de "Mes" al mes siguiente y confirma que aparece la mensualidad proyectada con el tag `MSI`.
 4. Cierra sesión borrando la cookie del navegador (o en incógnito) y confirma que `/app/transacciones.html` te manda a `/login.html`.
+
+---
+
+## Módulo 3: Préstamos completo (pendientes, archivados, abonar, calendario MSI)
+
+Segundo módulo migrado. Vive en `widget/app/prestamos.html` — usa las mismas
+variables de entorno y login que el Módulo 2, no necesitas configurar nada nuevo.
+
+### URL
+
+- `https://fin-oscap.vercel.app/app/prestamos.html`
+
+### Qué trae
+
+- ✅ Pestañas "Pendientes" y "Archivados", igual que Streamlit.
+- ✅ Selector "Viendo como" (se guarda en el navegador, no hace falta elegirlo cada vez).
+- ✅ Métricas "Yo debo" / "Me deben" y filtro por dirección.
+- ✅ Detalle expandible con los abonos registrados y el calendario de MSI cuando aplica.
+- ✅ Abonar (pago normal / adelantado / condonado) y eliminar (solo si no tiene abonos, igual que la app).
+- ⏸️ No incluye crear un préstamo "suelto" sin transacción ligada — en Streamlit tampoco existe esa opción (los préstamos solo se crean desde "Nueva transacción" marcando "Es préstamo o apoyo"), así que no es una función que falte, es igual a como ya funciona.
+
+### Testing de este módulo
+
+1. En `/app/prestamos.html`, cambia "Viendo como" entre los dos usuarios y confirma que "Yo debo"/"Me deben" se invierte correctamente.
+2. Abona a un préstamo pendiente y confirma que la barra de progreso y el monto restante se actualizan.
+3. Si tienes un préstamo con `tipo_pago = msi`, ábrele el detalle y confirma que el calendario muestra los meses correctos (compáralo contra Streamlit).
+4. Crea un préstamo de prueba desde Transacciones, abónalo completo, confirma que pasa a la pestaña "Archivados".
 
 ---
 
