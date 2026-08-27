@@ -1,7 +1,7 @@
 """
 test_widget.py
 ---------------
-Verifica que el widget de captura rápida (widget/index.html) pueda
+Verifica que el widget de captura rápida (widget/captura.html) pueda
 conectarse a Supabase y operar con la anon key exactamente como lo hace el
 HTML en el navegador: lee categorías, usuarios, cuentas y tarjetas, inserta
 una transacción de prueba y la borra.

@@ -2,7 +2,7 @@
   "name": "finanzas-widget",
   "version": "1.0.0",
   "private": true,
-  "description": "Widget de captura rápida de gastos — sirve index.html y una función serverless en api/data.js que conecta directo a Postgres.",
+  "description": "App de finanzas: captura rápida de gastos (captura.html) y módulo completo de Transacciones (app/), con funciones serverless en api/ que conectan directo a Postgres.",
   "dependencies": {
     "pg": "^8.11.3"
   }

@@ -3,7 +3,7 @@
 Este documento resume cómo poner en marcha las tres mejoras hechas al proyecto:
 
 1. **Caché en Streamlit** (`database/queries.py`, `app.py`) — ya está en el código, no requiere configuración adicional. Reduce el tiempo de carga porque deja de golpear la base de datos de Supabase en cada rerun.
-2. **Widget web de captura rápida** (`widget/index.html`) — una página HTML independiente (no depende de Streamlit) para registrar un gasto (o un préstamo/apoyo ligado) desde el celular en segundos, sin abrir la app completa.
+2. **Widget web de captura rápida** (`widget/captura.html`) — una página HTML independiente (no depende de Streamlit) para registrar un gasto (o un préstamo/apoyo ligado) desde el celular en segundos, sin abrir la app completa.
 3. **Backend serverless** (`widget/api/data.js` y `widget/api/prestamo.js`) — funciones en Vercel que conectan directo a Postgres (igual que la app de Streamlit), usando el **connection pooler** de Supabase. El widget ya no llama a la REST API pública de Supabase — eso evita el incidente que tuvieron con su API Gateway (`PGRST002` / 503), porque esa capa ya no está en el camino.
 
 ---
@@ -40,7 +40,7 @@ Alternativa sin CLI: Vercel → tu proyecto `fin-oscap` → **Settings → Envir
 
 ## Paso 2: (Opcional) Ajustar el usuario por defecto del widget
 
-Abre [widget/index.html](widget/index.html) y busca, dentro del `<script>`:
+Abre [widget/captura.html](widget/captura.html) y busca, dentro del `<script>`:
 
 ```js
 const USUARIO_ID_DEFECTO = 1;
@@ -147,7 +147,11 @@ WITH CHECK (tipo IN ('gasto', 'ingreso') AND usuario_id = 2)  -- reemplaza 2 por
 3. Cuando termine te da la URL, ej. `https://fin-oscap.vercel.app`.
 4. Abre esa URL en el celular de tu novio y agrégala a la pantalla de inicio ("Agregar a pantalla de inicio") para que se sienta como una app.
 
-Si cambiaste algo en `widget/index.html` o `widget/api/data.js`, siempre tienes que repetir `vercel --prod` para que se vea reflejado — Vercel no se entera solo de los cambios en tu disco a menos que conectes un repo de Git (ver el aviso al inicio de esta conversación sobre "vercel.link/git").
+Si cambiaste algo en `widget/captura.html`, `widget/app/*` o `widget/api/*.js`, siempre tienes que repetir `vercel --prod` para que se vea reflejado — Vercel no se entera solo de los cambios en tu disco a menos que conectes un repo de Git (ver el aviso al inicio de esta conversación sobre "vercel.link/git").
+
+**URLs del proyecto:**
+- `https://fin-oscap.vercel.app/` → redirige a la app completa (pide login).
+- `https://fin-oscap.vercel.app/captura.html` → el widget de captura rápida, sin login — este es el link que debe tener guardado tu novio en su pantalla de inicio (si antes guardó la raíz `/`, dile que lo reemplace por este).
 
 ---
 
@@ -177,7 +181,7 @@ Debe regresar un JSON con `usuarios`, `categorias`, `cuentas` y `tarjetas`. Si d
 
 Primer módulo migrado de Streamlit a HTML/JS + serverless, según el plan de migración
 acordado. Vive en `widget/app/transacciones.html`. El widget de captura rápida
-(`widget/index.html`) no cambió — sigue público, sin login, para tu novio.
+(`widget/captura.html`, antes `index.html` — se movió para que la raíz `/` pueda apuntar al login) no cambió en su lógica — sigue público, sin login, para tu novio.
 
 Esta página sí necesita login porque expone el historial completo de transacciones,
 no solo un formulario de captura.

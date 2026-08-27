@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Captura Rápida — Finanzas</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(160deg, #1e5f8c 0%, #0f8080 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .card {
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    width: 100%;
+    max-width: 420px;
+    padding: 28px 24px 32px;
+  }
+
+  .card h1 {
+    font-size: 1.4rem;
+    color: #133a4f;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .card .subtitle {
+    text-align: center;
+    color: #6b8794;
+    font-size: 0.85rem;
+    margin-bottom: 22px;
+  }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #35606f;
+    margin: 14px 0 6px;
+  }
+
+  input, select, textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e1ecef;
+    border-radius: 12px;
+    font-size: 1rem;
+    color: #133a4f;
+    background: #f9fcfd;
+    transition: border-color 0.15s ease;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #0f8080;
+    background: #ffffff;
+  }
+
+  textarea { resize: vertical; min-height: 60px; }
+
+  .montos-rapidos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .monto-btn {
+    flex: 1 1 auto;
+    min-width: 64px;
+    width: auto;
+    padding: 10px 8px;
+    border: 2px solid #cfe6e6;
+    border-radius: 10px;
+    background: #eefaf9;
+    color: #0f8080;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .monto-btn:hover, .monto-btn:active {
+    background: #0f8080;
+    color: #ffffff;
+    border-color: #0f8080;
+  }
+
+  .monto-btn.activo {
+    background: #0f8080;
+    color: #ffffff;
+    border-color: #0f8080;
+  }
+
+  button[type="submit"] {
+    width: 100%;
+    margin-top: 24px;
+    padding: 15px;
+    border: none;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #1e5f8c, #0f8080);
+    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+  }
+
+  button[type="submit"]:active { transform: scale(0.98); }
+  button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .mensaje {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    display: none;
+  }
+
+  .mensaje.exito {
+    display: block;
+    background: #e3f7ee;
+    color: #157a4b;
+    border: 2px solid #a9e6c9;
+  }
+
+  .mensaje.error {
+    display: block;
+    background: #fdecec;
+    color: #b3261e;
+    border: 2px solid #f5b8b4;
+  }
+
+  .campo-doble {
+    display: flex;
+    gap: 10px;
+  }
+
+  .campo-doble > div { flex: 1; }
+
+  .oculto { display: none !important; }
+
+  .msi-box {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: #f4f9f8;
+    border-radius: 10px;
+  }
+
+  .msi-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.85rem;
+    color: #35606f;
+    cursor: pointer;
+  }
+
+  .msi-check input { width: auto; padding: 0; }
+
+  .msi-box select { margin-top: 8px; }
+
+  @media (max-width: 400px) {
+    .card { padding: 22px 16px 26px; border-radius: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>💸 Captura Rápida</h1>
+  <p class="subtitle">Registra un gasto en segundos</p>
+
+  <form id="form-gasto">
+    <label for="descripcion">Descripción</label>
+    <input type="text" id="descripcion" placeholder="Ej. Café, gasolina, súper..." required>
+
+    <label for="monto">Monto</label>
+    <input type="number" id="monto" step="0.01" min="0.01" placeholder="0.00" inputmode="decimal" required>
+
+    <div class="montos-rapidos" id="montos-rapidos">
+      <button type="button" class="monto-btn" data-monto="50">$50</button>
+      <button type="button" class="monto-btn" data-monto="100">$100</button>
+      <button type="button" class="monto-btn" data-monto="500">$500</button>
+      <button type="button" class="monto-btn" data-monto="1000">$1000</button>
+      <button type="button" class="monto-btn" data-monto="2000">$2000</button>
+    </div>
+
+    <div class="campo-doble">
+      <div>
+        <label for="usuario">Usuario</label>
+        <select id="usuario" required>
+          <option value="">Cargando...</option>
+        </select>
+      </div>
+      <div>
+        <label for="tipo">Tipo</label>
+        <select id="tipo" required>
+          <option value="gasto">Gasto</option>
+          <option value="ingreso">Ingreso</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="campo-doble">
+      <div>
+        <label for="categoria">Categoría</label>
+        <select id="categoria" required>
+          <option value="">Cargando...</option>
+        </select>
+      </div>
+      <div>
+        <label for="fecha">Fecha</label>
+        <input type="date" id="fecha" required>
+      </div>
+    </div>
+
+    <label for="medio">Medio (cuenta o tarjeta)</label>
+    <select id="medio" required>
+      <option value="">Cargando...</option>
+    </select>
+
+    <div id="msi-box" class="msi-box oculto">
+      <label class="msi-check">
+        <input type="checkbox" id="usar-msi">
+        Meses sin intereses
+      </label>
+      <select id="msi-meses" class="oculto">
+        <option value="3">3 meses</option>
+        <option value="6">6 meses</option>
+        <option value="9">9 meses</option>
+        <option value="12">12 meses</option>
+        <option value="18">18 meses</option>
+        <option value="20">20 meses</option>
+        <option value="24">24 meses</option>
+      </select>
+    </div>
+
+    <label for="notas">Notas (opcional)</label>
+    <textarea id="notas" placeholder="Algo más que quieras anotar..."></textarea>
+
+    <label class="msi-check" style="margin-top:14px">
+      <input type="checkbox" id="es-prestamo">
+      💸 Es préstamo o apoyo
+    </label>
+
+    <div id="prestamo-box" class="msi-box oculto">
+      <label for="p-contraparte">¿Con quién?</label>
+      <select id="p-contraparte">
+        <option value="pareja">Mi pareja</option>
+        <option value="externa">Persona externa</option>
+      </select>
+
+      <input type="text" id="p-nombre-externo" class="oculto" placeholder="Nombre (ej. Edgar, Mamá)" style="margin-top:8px">
+
+      <label for="p-direccion">¿Qué pasó?</label>
+      <select id="p-direccion">
+        <option value="me_apoyan">Me van a apoyar a pagar esto</option>
+        <option value="yo_pague">Yo pagué por alguien (me van a pagar)</option>
+      </select>
+
+      <label for="p-monto">Monto del préstamo</label>
+      <input type="number" id="p-monto" step="0.01" min="0.01" placeholder="0.00">
+      <div class="montos-rapidos" id="p-montos-rapidos">
+        <button type="button" class="monto-btn p-monto-btn" data-modo="completo">Completo</button>
+        <button type="button" class="monto-btn p-monto-btn" data-modo="mitad">La mitad</button>
+      </div>
+
+      <label for="p-forma-pago">¿Cómo van a pagar?</label>
+      <select id="p-forma-pago">
+        <option value="unico">Un solo pago</option>
+        <option value="abonos">Abonos libres</option>
+        <option value="msi" id="p-opcion-msi">Conforme a MSI</option>
+      </select>
+    </div>
+
+    <button type="submit" id="btn-guardar">Guardar gasto</button>
+
+    <div class="mensaje" id="mensaje"></div>
+  </form>
+</div>
+
+<script>
+  // ── Configuración ────────────────────────────────────────────────────
+  // El widget habla con /api/data (función serverless en este mismo
+  // proyecto de Vercel), que conecta directo a Postgres — ya no pasa por
+  // la REST API pública de Supabase.
+  const USUARIO_ID_DEFECTO = 1;
+  // ─────────────────────────────────────────────────────────────────────
+
+  const $ = (id) => document.getElementById(id);
+  const mensajeEl = $('mensaje');
+  const btnGuardar = $('btn-guardar');
+
+  function mostrarMensaje(texto, tipo) {
+    mensajeEl.textContent = texto;
+    mensajeEl.className = `mensaje ${tipo}`;
+  }
+
+  function ocultarMensaje() {
+    mensajeEl.className = 'mensaje';
+    mensajeEl.textContent = '';
+  }
+
+  // Fecha de hoy por defecto
+  $('fecha').valueAsDate = new Date();
+
+  // Botones de montos rápidos (monto principal)
+  document.querySelectorAll('#montos-rapidos .monto-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      $('monto').value = btn.dataset.monto;
+      document.querySelectorAll('#montos-rapidos .monto-btn').forEach((b) => b.classList.remove('activo'));
+      btn.classList.add('activo');
+    });
+  });
+  $('monto').addEventListener('input', () => {
+    document.querySelectorAll('#montos-rapidos .monto-btn').forEach((b) => b.classList.remove('activo'));
+  });
+
+  function actualizarVisibilidadMsi() {
+    const esTarjeta = $('medio').value.startsWith('tarjeta:');
+    $('msi-box').classList.toggle('oculto', !esTarjeta);
+    if (!esTarjeta) {
+      $('usar-msi').checked = false;
+      $('msi-meses').classList.add('oculto');
+    }
+    actualizarOpcionMsiPrestamo();
+  }
+
+  function mesesSinInteresesActual() {
+    const esTarjeta = $('medio').value.startsWith('tarjeta:');
+    return (esTarjeta && $('usar-msi').checked) ? Number($('msi-meses').value) : 0;
+  }
+
+  function actualizarOpcionMsiPrestamo() {
+    const meses = mesesSinInteresesActual();
+    const opt = $('p-opcion-msi');
+    if (meses > 0) {
+      opt.textContent = `Conforme a MSI (${meses} meses)`;
+      opt.hidden = false;
+    } else {
+      opt.hidden = true;
+      if ($('p-forma-pago').value === 'msi') {
+        $('p-forma-pago').value = 'abonos';
+      }
+    }
+  }
+
+  $('msi-meses').addEventListener('change', actualizarOpcionMsiPrestamo);
+
+  // ── Préstamo / apoyo ────────────────────────────────────────────────
+  $('es-prestamo').addEventListener('change', () => {
+    const activo = $('es-prestamo').checked;
+    $('prestamo-box').classList.toggle('oculto', !activo);
+    if (activo) actualizarOpcionMsiPrestamo();
+  });
+
+  $('p-contraparte').addEventListener('change', () => {
+    $('p-nombre-externo').classList.toggle('oculto', $('p-contraparte').value !== 'externa');
+  });
+
+  document.querySelectorAll('#p-montos-rapidos .p-monto-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const base = parseFloat($('monto').value) || 0;
+      const valor = btn.dataset.modo === 'mitad' ? Math.round((base / 2) * 100) / 100 : base;
+      $('p-monto').value = valor;
+      document.querySelectorAll('#p-montos-rapidos .p-monto-btn').forEach((b) => b.classList.remove('activo'));
+      btn.classList.add('activo');
+    });
+  });
+
+  function resetearPrestamo() {
+    $('es-prestamo').checked = false;
+    $('prestamo-box').classList.add('oculto');
+    $('p-contraparte').value = 'pareja';
+    $('p-nombre-externo').value = '';
+    $('p-nombre-externo').classList.add('oculto');
+    $('p-direccion').value = 'me_apoyan';
+    $('p-monto').value = '';
+    $('p-forma-pago').value = 'unico';
+    document.querySelectorAll('#p-montos-rapidos .p-monto-btn').forEach((b) => b.classList.remove('activo'));
+  }
+
+  $('medio').addEventListener('change', actualizarVisibilidadMsi);
+  $('usar-msi').addEventListener('change', () => {
+    $('msi-meses').classList.toggle('oculto', !$('usar-msi').checked);
+    actualizarOpcionMsiPrestamo();
+  });
+
+  let usuariosCache = [];
+
+  async function pedirDatos(usuarioId, tipo) {
+    const res = await fetch(`/api/data?usuario_id=${usuarioId}&tipo=${tipo}`);
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => ({}));
+      throw new Error(cuerpo.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  function poblarUsuarios(usuarios) {
+    usuariosCache = usuarios;
+    const selectUsuario = $('usuario');
+    selectUsuario.innerHTML = usuarios
+      .map((u) => `<option value="${u.id}">${u.nombre}</option>`)
+      .join('') || '<option value="">Sin usuarios</option>';
+    if (usuarios.some((u) => u.id === USUARIO_ID_DEFECTO)) {
+      selectUsuario.value = String(USUARIO_ID_DEFECTO);
+    }
+  }
+
+  function poblarCategorias(categorias) {
+    $('categoria').innerHTML = categorias
+      .map((c) => `<option value="${c.id}">${c.icono || '📦'} ${c.nombre}</option>`)
+      .join('') || '<option value="">Sin categorías</option>';
+  }
+
+  function poblarMedios(cuentas, tarjetas) {
+    const opcionesCuentas = cuentas
+      .map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`)
+      .join('');
+    const opcionesTarjetas = tarjetas
+      .map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`)
+      .join('');
+    $('medio').innerHTML = opcionesCuentas + opcionesTarjetas || '<option value="">Sin cuentas/tarjetas</option>';
+    actualizarVisibilidadMsi();
+  }
+
+  async function refrescarDependientes() {
+    try {
+      const datos = await pedirDatos($('usuario').value, $('tipo').value);
+      poblarCategorias(datos.categorias);
+      poblarMedios(datos.cuentas, datos.tarjetas);
+    } catch (err) {
+      mostrarMensaje('❌ Error al recargar datos: ' + err.message, 'error');
+    }
+  }
+
+  async function cargarInicial() {
+    try {
+      const datos = await pedirDatos(USUARIO_ID_DEFECTO, $('tipo').value);
+      poblarUsuarios(datos.usuarios);
+      if ($('usuario').value === String(USUARIO_ID_DEFECTO)) {
+        poblarCategorias(datos.categorias);
+        poblarMedios(datos.cuentas, datos.tarjetas);
+      } else {
+        await refrescarDependientes();
+      }
+    } catch (err) {
+      mostrarMensaje('❌ Error al cargar datos: ' + err.message, 'error');
+    }
+  }
+
+  $('usuario').addEventListener('change', refrescarDependientes);
+  $('tipo').addEventListener('change', refrescarDependientes);
+
+  cargarInicial();
+
+  $('form-gasto').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    ocultarMensaje();
+
+    const descripcion = $('descripcion').value.trim();
+    const monto = parseFloat($('monto').value);
+    const usuarioId = $('usuario').value;
+    const tipo = $('tipo').value;
+    const categoriaId = $('categoria').value;
+    const fecha = $('fecha').value;
+    const medio = $('medio').value;
+    const notas = $('notas').value.trim();
+
+    if (!descripcion || !monto || monto <= 0 || !usuarioId || !categoriaId || !fecha || !medio) {
+      mostrarMensaje('⚠️ Completa todos los campos requeridos.', 'error');
+      return;
+    }
+
+    const [tipoMedio, medioId] = medio.split(':');
+    const esTarjeta = tipoMedio === 'tarjeta';
+    const mesesSinIntereses = (esTarjeta && $('usar-msi').checked) ? Number($('msi-meses').value) : 0;
+    const montoPorMes = mesesSinIntereses > 0 ? Math.round((monto / mesesSinIntereses) * 100) / 100 : 0;
+
+    // ── Préstamo / apoyo (opcional) ──
+    let prestamoPayload = null;
+    if ($('es-prestamo').checked) {
+      const pMonto = parseFloat($('p-monto').value);
+      const esParejaP = $('p-contraparte').value === 'pareja';
+      const nombreExterno = esParejaP ? null : ($('p-nombre-externo').value.trim() || null);
+
+      if (!pMonto || pMonto <= 0) {
+        mostrarMensaje('⚠️ Indica el monto del préstamo.', 'error');
+        return;
+      }
+      if (!esParejaP && !nombreExterno) {
+        mostrarMensaje('⚠️ Escribe el nombre de la persona externa.', 'error');
+        return;
+      }
+
+      const otro = usuariosCache.find((u) => u.id !== Number(usuarioId)) || null;
+      if (esParejaP && !otro) {
+        mostrarMensaje('⚠️ No se encontró a tu pareja en el sistema.', 'error');
+        return;
+      }
+
+      let acreedorId, deudorId;
+      if ($('p-direccion').value === 'me_apoyan') {
+        acreedorId = esParejaP ? otro.id : null;
+        deudorId = Number(usuarioId);
+      } else {
+        acreedorId = Number(usuarioId);
+        deudorId = esParejaP ? otro.id : null;
+      }
+
+      const formaPago = $('p-forma-pago').value;
+      let mesesMsiP = null;
+      let montoPorMesP = null;
+      if (formaPago === 'msi') {
+        mesesMsiP = mesesSinIntereses;
+        montoPorMesP = Math.round((pMonto / mesesMsiP) * 100) / 100;
+      }
+
+      prestamoPayload = {
+        monto: pMonto,
+        fecha: fecha,
+        notas: descripcion,
+        acreedor_id: acreedorId,
+        deudor_id: deudorId,
+        nombre_externo: nombreExterno,
+        tipo_pago: formaPago,
+        meses_msi: mesesMsiP,
+        monto_por_mes: montoPorMesP,
+      };
+    }
+
+    const payload = {
+      usuario_id: Number(usuarioId),
+      cuenta_id: tipoMedio === 'cuenta' ? Number(medioId) : null,
+      tarjeta_id: esTarjeta ? Number(medioId) : null,
+      categoria_id: Number(categoriaId),
+      monto: monto,
+      fecha: fecha,
+      descripcion: descripcion,
+      tipo: tipo,
+      notas: notas,
+      meses_sin_intereses: mesesSinIntereses,
+      monto_por_mes: montoPorMes,
+    };
+
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = 'Guardando...';
+
+    try {
+      const res = await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const cuerpo = await res.json().catch(() => ({}));
+        throw new Error(cuerpo.error || `HTTP ${res.status}`);
+      }
+
+      const { id: txId } = await res.json();
+      let mensajeFinal = '✅ ¡Gasto guardado con éxito!';
+      let tipoFinal = 'exito';
+
+      if (prestamoPayload) {
+        const resP = await fetch('/api/prestamo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...prestamoPayload, transaccion_id: txId }),
+        });
+        if (!resP.ok) {
+          const cuerpoP = await resP.json().catch(() => ({}));
+          mensajeFinal = '⚠️ El gasto se guardó, pero el préstamo falló: ' + (cuerpoP.error || `HTTP ${resP.status}`);
+          tipoFinal = 'error';
+        } else {
+          mensajeFinal = '✅ ¡Gasto y préstamo guardados con éxito!';
+        }
+      }
+
+      mostrarMensaje(mensajeFinal, tipoFinal);
+      const usuarioAntes = $('usuario').value;
+      $('form-gasto').reset();
+      $('fecha').valueAsDate = new Date();
+      $('usuario').value = usuarioAntes;
+      $('tipo').value = 'gasto';
+      document.querySelectorAll('.monto-btn').forEach((b) => b.classList.remove('activo'));
+      resetearPrestamo();
+      await refrescarDependientes();
+    } catch (err) {
+      mostrarMensaje('❌ Error al guardar: ' + err.message, 'error');
+    } finally {
+      btnGuardar.disabled = false;
+      btnGuardar.textContent = 'Guardar gasto';
+    }
+  });
+</script>
+
+</body>
+</html>

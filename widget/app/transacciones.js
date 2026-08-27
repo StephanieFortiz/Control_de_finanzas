@@ -22,7 +22,7 @@ async function authFetch(url, opts) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// NUEVA TRANSACCIÓN (mismo comportamiento que widget/index.html)
+// NUEVA TRANSACCIÓN (mismo comportamiento que widget/captura.html)
 // ══════════════════════════════════════════════════════════════════════
 
 (function nuevaTransaccion() {
