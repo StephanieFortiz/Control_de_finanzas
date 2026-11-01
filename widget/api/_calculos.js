@@ -2,8 +2,6 @@
 // dias_para_pago/corte, proyectar_msi_en_periodo, estado_tarjeta,
 // agrupar_por_periodo. Fechas siempre como strings ISO 'YYYY-MM-DD'.
 
-const { fechaMasNMeses } = require('./_msi');
-
 const MESES_ES = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
   'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -68,6 +66,29 @@ function calcularPeriodoCorte(fechaGastoIso, diaCorte) {
   return { fechaCorte, fechaInicio, periodoLabel: labelPeriodo(fechaCorte) };
 }
 
+// Fecha de corte N meses después de una fecha de corte, respetando el día de corte
+// de la tarjeta (un corte de febrero recortado al 28 vuelve al 30 en marzo).
+function fechaCorteN(fechaCorteIso, n, diaCorte) {
+  const [anio, mes] = fechaCorteIso.split('-').map(Number);
+  const mTotal = mes + n;
+  const anioN = anio + Math.floor((mTotal - 1) / 12);
+  const mesN = ((mTotal - 1) % 12) + 1;
+  return armarFecha(anioN, mesN, Math.min(diaCorte, ultimoDiaDeMes(anioN, mesN)));
+}
+
+// Período en que cae la mensualidad N (0 = el cargo original) de una compra a MSI:
+// el período de la compra más N cortes. La mensualidad se muestra con fecha del
+// primer día de ese período, es decir, el primer cobro después del corte anterior.
+function periodoMensualidadMsi(fechaCompraIso, n, diaCorte) {
+  const inicial = calcularPeriodoCorte(fechaCompraIso, diaCorte);
+  const fechaCorte = fechaCorteN(inicial.fechaCorte, n, diaCorte);
+  return {
+    fechaCorte,
+    fechaInicio: inicioDePeriodoDesdeCorte(fechaCorte, diaCorte),
+    periodoLabel: labelPeriodo(fechaCorte),
+  };
+}
+
 function calcularFechaPago(fechaCorteIso, diaPago) {
   const [anio, mes, dia] = fechaCorteIso.split('-').map(Number);
   if (diaPago > dia) {
@@ -98,8 +119,7 @@ function proyectarMsiEnPeriodo(transaccionesMsi, diaCorte, fechaCorteObjetivoIso
     const montoMensual = montoMensualDe(t);
 
     for (let n = 0; n < meses; n++) {
-      const fechaN = fechaMasNMeses(t.fecha, n);
-      const periodoN = calcularPeriodoCorte(fechaN, diaCorte);
+      const periodoN = periodoMensualidadMsi(t.fecha, n, diaCorte);
       if (periodoN.fechaCorte === fechaCorteObjetivoIso) {
         proyecciones.push({
           ...t,
@@ -108,7 +128,7 @@ function proyectarMsiEnPeriodo(transaccionesMsi, diaCorte, fechaCorteObjetivoIso
           monto_original: t.monto,
           es_proyeccion: n > 0,
           mensualidad_num: n + 1,
-          fecha: fechaN,
+          fecha: n === 0 ? t.fecha : periodoN.fechaInicio,
           fecha_cargo_original: t.fecha,
           descripcion: n === 0 ? t.descripcion : `${t.descripcion} (${n + 1}/${meses})`,
         });
@@ -194,8 +214,7 @@ function agruparPorPeriodo(transacciones, diaCorte) {
     const meses = t.meses_sin_intereses;
     const montoMensual = montoMensualDe(t);
     for (let n = 1; n < meses; n++) {
-      const fechaN = fechaMasNMeses(t.fecha, n);
-      const periodoN = calcularPeriodoCorte(fechaN, diaCorte);
+      const periodoN = periodoMensualidadMsi(t.fecha, n, diaCorte);
       const proyeccion = {
         ...t,
         monto: montoMensual,
@@ -203,7 +222,7 @@ function agruparPorPeriodo(transacciones, diaCorte) {
         monto_original: t.monto,
         es_proyeccion: true,
         mensualidad_num: n + 1,
-        fecha: fechaN,
+        fecha: periodoN.fechaInicio,
         fecha_cargo_original: t.fecha,
         descripcion: `${t.descripcion} (${n + 1}/${meses})`,
       };
@@ -217,5 +236,5 @@ function agruparPorPeriodo(transacciones, diaCorte) {
 
 module.exports = {
   calcularPeriodoCorte, calcularFechaPago, diasParaPago, diasParaCorte,
-  proyectarMsiEnPeriodo, estadoTarjeta, agruparPorPeriodo,
+  periodoMensualidadMsi, proyectarMsiEnPeriodo, estadoTarjeta, agruparPorPeriodo,
 };

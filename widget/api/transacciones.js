@@ -9,6 +9,7 @@ const QUERY_BASE = `
       c.nombre          AS cuenta_nombre,
       tc.nombre         AS tarjeta_nombre,
       tc.banco          AS tarjeta_banco,
+      tc.dia_corte      AS tarjeta_dia_corte,
       cat.nombre        AS categoria_nombre,
       cat.icono         AS categoria_icono,
       cat.color         AS categoria_color,

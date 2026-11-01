@@ -1,6 +1,8 @@
 // Port de utils/calculos.py: _fecha_mas_n_meses e inyectar_proyecciones_msi.
 // Las fechas se manejan como strings ISO 'YYYY-MM-DD' en todo momento.
 
+const { periodoMensualidadMsi } = require('./_calculos');
+
 function ultimoDiaDeMes(anio, mes) {
   return new Date(Date.UTC(anio, mes, 0)).getUTCDate();
 }
@@ -23,6 +25,8 @@ function fechaMasNMeses(fechaIso, n) {
   return objAFechaISO({ anio: anioNuevo, mes: mesNuevo, dia: diaNuevo });
 }
 
+// Las transacciones deben traer tarjeta_dia_corte: cada mensualidad cae el primer
+// día del período de corte que le toca (el día después del corte anterior).
 function inyectarProyeccionesMsi(transacciones, desde, hasta, txsMsiOrigen) {
   const fuente = txsMsiOrigen != null ? txsMsiOrigen : transacciones;
   const todosMsi = fuente.filter((t) => (t.meses_sin_intereses || 0) > 0);
@@ -35,7 +39,9 @@ function inyectarProyeccionesMsi(transacciones, desde, hasta, txsMsiOrigen) {
       : Math.round((t.monto / meses) * 100) / 100;
 
     for (let n = 1; n < meses; n++) {
-      const fechaN = fechaMasNMeses(t.fecha, n);
+      const fechaN = t.tarjeta_dia_corte
+        ? periodoMensualidadMsi(t.fecha, n, t.tarjeta_dia_corte).fechaInicio
+        : fechaMasNMeses(t.fecha, n);
       if (fechaN < desde || fechaN > hasta) continue;
 
       proyecciones.push({

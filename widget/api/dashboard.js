@@ -17,7 +17,7 @@ function montoEfectivo(t) {
 
 const QUERY_TX = `
   SELECT t.*, cat.nombre AS categoria_nombre, cat.color AS categoria_color, cat.icono AS categoria_icono,
-         tc.nombre AS tarjeta_nombre
+         tc.nombre AS tarjeta_nombre, tc.dia_corte AS tarjeta_dia_corte
   FROM transaccion t
   LEFT JOIN categoria cat      ON t.categoria_id = cat.id
   LEFT JOIN tarjeta_credito tc ON t.tarjeta_id   = tc.id
