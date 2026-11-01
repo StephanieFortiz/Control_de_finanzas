@@ -21,7 +21,7 @@ Producción: https://fin-oscap.vercel.app
 | `app/prestamos.html` | Préstamos pendientes y archivados, abonos y calendario MSI. |
 | `app/configuracion.html` | Perfiles, cuentas, tarjetas y categorías. |
 
-La raíz `/` (y el antiguo `/captura.html`) redirigen a Transacciones. Todas las páginas de `app/` piden iniciar sesión en `/login.html`.
+La raíz `/` redirige a Transacciones. Todas las páginas de `app/` piden iniciar sesión en `/login.html`.
 
 ## Estructura del proyecto
 
