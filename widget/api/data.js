@@ -1,5 +1,8 @@
 const { getPool } = require('./_db');
 
+// Tarjeta preseleccionada cuando el usuario aún no tiene cargos con tarjeta.
+const TARJETA_DEFECTO_POR_USUARIO = { octavio: 'likeu' };
+
 module.exports = async (req, res) => {
   const db = getPool();
 
@@ -8,7 +11,7 @@ module.exports = async (req, res) => {
       const tipo = req.query.tipo === 'ingreso' ? 'ingreso' : 'gasto';
       const usuarioId = req.query.usuario_id ? Number(req.query.usuario_id) : null;
 
-      const [usuarios, categorias, cuentas, tarjetas] = await Promise.all([
+      const [usuarios, categorias, cuentas, tarjetas, ultimaTarjeta] = await Promise.all([
         db.query('SELECT id, nombre FROM usuario ORDER BY id'),
         db.query(
           'SELECT id, nombre, icono FROM categoria WHERE tipo = $1 AND activa = 1 ORDER BY nombre',
@@ -26,13 +29,35 @@ module.exports = async (req, res) => {
               [usuarioId]
             )
           : { rows: [] },
+        usuarioId
+          ? db.query(
+              `SELECT tarjeta_id FROM transaccion
+               WHERE usuario_id = $1 AND tarjeta_id IS NOT NULL
+               ORDER BY id DESC LIMIT 1`,
+              [usuarioId]
+            )
+          : { rows: [] },
       ]);
+
+      // Medio preseleccionado: la última tarjeta usada (si sigue activa) y, si no hay,
+      // la tarjeta configurada para el usuario o la primera tarjeta.
+      let medioDefecto = null;
+      const ultimaId = ultimaTarjeta.rows[0] && ultimaTarjeta.rows[0].tarjeta_id;
+      if (tarjetas.rows.some((t) => t.id === ultimaId)) {
+        medioDefecto = `tarjeta:${ultimaId}`;
+      } else {
+        const usuario = usuarios.rows.find((u) => u.id === usuarioId);
+        const nombreTarjeta = usuario && TARJETA_DEFECTO_POR_USUARIO[usuario.nombre.toLowerCase()];
+        const tarjeta = tarjetas.rows.find((t) => t.nombre.toLowerCase() === nombreTarjeta) || tarjetas.rows[0];
+        if (tarjeta) medioDefecto = `tarjeta:${tarjeta.id}`;
+      }
 
       return res.status(200).json({
         usuarios: usuarios.rows,
         categorias: categorias.rows,
         cuentas: cuentas.rows,
         tarjetas: tarjetas.rows,
+        medio_defecto: medioDefecto,
       });
     }
 

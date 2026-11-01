@@ -427,14 +427,15 @@
       .join('') || '<option value="">Sin categorías</option>';
   }
 
-  function poblarMedios(cuentas, tarjetas) {
+  function poblarMedios(cuentas, tarjetas, medioDefecto) {
     const opcionesCuentas = cuentas
       .map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`)
       .join('');
     const opcionesTarjetas = tarjetas
       .map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`)
       .join('');
-    $('medio').innerHTML = opcionesCuentas + opcionesTarjetas || '<option value="">Sin cuentas/tarjetas</option>';
+    $('medio').innerHTML = opcionesTarjetas + opcionesCuentas || '<option value="">Sin cuentas/tarjetas</option>';
+    if (medioDefecto) $('medio').value = medioDefecto;
     actualizarVisibilidadMsi();
   }
 
@@ -442,7 +443,7 @@
     try {
       const datos = await pedirDatos($('usuario').value, $('tipo').value);
       poblarCategorias(datos.categorias);
-      poblarMedios(datos.cuentas, datos.tarjetas);
+      poblarMedios(datos.cuentas, datos.tarjetas, datos.medio_defecto);
     } catch (err) {
       mostrarMensaje('❌ Error al recargar datos: ' + err.message, 'error');
     }
@@ -454,7 +455,7 @@
       poblarUsuarios(datos.usuarios);
       if ($('usuario').value === String(USUARIO_ID_DEFECTO)) {
         poblarCategorias(datos.categorias);
-        poblarMedios(datos.cuentas, datos.tarjetas);
+        poblarMedios(datos.cuentas, datos.tarjetas, datos.medio_defecto);
       } else {
         await refrescarDependientes();
       }

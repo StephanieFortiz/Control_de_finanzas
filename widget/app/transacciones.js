@@ -134,10 +134,11 @@ async function authFetch(url, opts) {
     $('n-categoria').innerHTML = categorias.map((c) => `<option value="${c.id}">${c.icono || '📦'} ${c.nombre}</option>`).join('')
       || '<option value="">Sin categorías</option>';
   }
-  function poblarMediosN(cuentas, tarjetas) {
+  function poblarMediosN(cuentas, tarjetas, medioDefecto) {
     const oc = cuentas.map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`).join('');
     const ot = tarjetas.map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`).join('');
-    $('n-medio').innerHTML = oc + ot || '<option value="">Sin cuentas/tarjetas</option>';
+    $('n-medio').innerHTML = ot + oc || '<option value="">Sin cuentas/tarjetas</option>';
+    if (medioDefecto) $('n-medio').value = medioDefecto;
     actualizarVisibilidadMsiN();
   }
 
@@ -145,7 +146,7 @@ async function authFetch(url, opts) {
     try {
       const datos = await pedirDatosN($('n-usuario').value, $('n-tipo').value);
       poblarCategoriasN(datos.categorias);
-      poblarMediosN(datos.cuentas, datos.tarjetas);
+      poblarMediosN(datos.cuentas, datos.tarjetas, datos.medio_defecto);
     } catch (err) {
       mostrarMensajeN('❌ Error al recargar datos: ' + err.message, 'error');
     }
@@ -338,7 +339,7 @@ async function cargarMediosEnSelect(selectId, usuarioId) {
   const datos = await res.json();
   const oc = datos.cuentas.map((c) => `<option value="cuenta:${c.id}">🏦 ${c.nombre}</option>`).join('');
   const ot = datos.tarjetas.map((t) => `<option value="tarjeta:${t.id}">💳 ${t.nombre} (${t.banco})</option>`).join('');
-  $(selectId).innerHTML = oc + ot;
+  $(selectId).innerHTML = ot + oc;
 }
 
 async function inicializarFiltros() {
