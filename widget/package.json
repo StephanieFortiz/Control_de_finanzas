@@ -2,7 +2,7 @@
   "name": "finanzas-widget",
   "version": "1.0.0",
   "private": true,
-  "description": "App de finanzas: captura rápida de gastos (captura.html) y módulo completo de Transacciones (app/), con funciones serverless en api/ que conectan directo a Postgres.",
+  "description": "App de finanzas en pareja: páginas en app/ y funciones serverless en api/ que conectan directo a Postgres (Supabase).",
   "dependencies": {
     "pg": "^8.11.3"
   }

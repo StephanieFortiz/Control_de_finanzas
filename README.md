@@ -1,102 +1,86 @@
 # Finanzas
 
-Aplicación web para gestión de finanzas personales en pareja. Permite llevar el control de ingresos, gastos, tarjetas de crédito, préstamos y liquidaciones entre dos usuarios.
+Aplicación web para gestión de finanzas personales en pareja: ingresos, gastos, tarjetas de crédito (con meses sin intereses), préstamos entre los dos usuarios o con personas externas.
+
+Producción: https://fin-oscap.vercel.app
 
 ## Tecnologías
 
-- **Frontend/Backend**: [Streamlit](https://streamlit.io/)
-- **Base de datos**: PostgreSQL en [Supabase](https://supabase.com/)
-- **Visualización**: Plotly
-- **Procesamiento de datos**: Pandas
+- **Frontend**: HTML + JavaScript sin framework ni build.
+- **Backend**: funciones serverless de [Vercel](https://vercel.com/) (Node.js + [`pg`](https://node-postgres.com/)).
+- **Base de datos**: PostgreSQL en [Supabase](https://supabase.com/), vía su connection pooler.
+- **Gráficas**: [Apache ECharts](https://echarts.apache.org/), auto-hospedado en `widget/app/vendor/`.
 
-## Funcionalidades
+## Módulos
 
-- **Dashboard**: Resumen mensual de ingresos, gastos y ahorro; desglose de gastos por categoría; estado de tarjetas de crédito; balance de pareja.
-![alt text](image.png)
-- **Transacciones**: Registro de ingresos y gastos con soporte para pagos con tarjeta de crédito y meses sin intereses (MSI).
-![alt text](image-2.png)
-- **Tarjetas de crédito**: Seguimiento por fecha de corte, cálculo de saldo del estado de cuenta actual y proyecciones de MSI.
-![alt text](image-3.png)
-- **Préstamos**: Control de dinero prestado/recibido entre usuarios, pagos parciales y liquidación.
-- **Liquidaciones**: Cálculo del balance mensual entre los dos usuarios y registro de transferencias de saldo.
-- **Configuración**: Gestión de usuarios, cuentas bancarias, tarjetas de crédito y categorías personalizadas.
+| Página | Qué hace |
+|---|---|
+| `app/dashboard.html` | Resumen mensual: ingresos, gastos, ahorro, estado de tarjetas y gastos por categoría. |
+| `app/transacciones.html` | Nueva transacción (con préstamo/apoyo opcional), historial con filtros, editar, borrar y abonar. |
+| `app/tarjetas.html` | Estado de cuenta por fecha de corte, historial por período y ajustes de mensualidades MSI. |
+| `app/prestamos.html` | Préstamos pendientes y archivados, abonos y calendario MSI. |
+| `app/configuracion.html` | Perfiles, cuentas, tarjetas y categorías. |
+
+La raíz `/` (y el antiguo `/captura.html`) redirigen a Transacciones. Todas las páginas de `app/` piden iniciar sesión en `/login.html`.
 
 ## Estructura del proyecto
 
 ```
 Finanzas/
-├── app.py                 # Punto de entrada y navegación
-├── requirements.txt
-├── database/
-│   ├── schema.py          # Creación de tablas y migraciones
-│   └── queries.py         # Todas las operaciones de base de datos
-├── views/                 # Módulos de interfaz (uno por página)
-│   ├── dashboard.py
-│   ├── transacciones.py
-│   ├── tarjetas.py
-│   ├── prestamos.py
-│   ├── liquidaciones.py
-│   └── configuracion.py
-└── utils/
-    └── calculos.py        # Lógica financiera (sin dependencias de Streamlit)
+├── schema.sql            # Tablas de la base de datos (correr en el SQL Editor de Supabase)
+└── widget/               # Proyecto de Vercel (fin-oscap)
+    ├── index.html        # Redirige a la app
+    ├── login.html
+    ├── app/              # Páginas y su JS (_shared.js tiene utilidades comunes)
+    └── api/              # Funciones serverless, una por recurso
+        ├── _db.js        # Pool de conexión a Postgres
+        ├── _auth.js      # Sesión firmada con cookie
+        ├── _calculos.js  # Ciclos de corte/pago de tarjetas
+        └── _msi.js       # Proyecciones de meses sin intereses
 ```
 
-## Instalación local
+## Configuración en Vercel
 
-### Requisitos
+El proyecto de Vercel apunta a la carpeta `widget/`. Necesita estas variables de entorno (Production):
 
-- Python 3.10+
-- Una instancia de PostgreSQL o proyecto en Supabase
+| Variable | Valor |
+|---|---|
+| `PGHOST` | Host del **Transaction pooler** de Supabase (`aws-…pooler.supabase.com`) |
+| `PGPORT` | `6543` |
+| `PGDATABASE` | `postgres` |
+| `PGUSER` | Usuario del pooler (`postgres.<id-del-proyecto>`) |
+| `PGPASSWORD` | Contraseña de Postgres |
+| `APP_PASSWORD` | Contraseña compartida para entrar a la app |
+| `SESSION_SECRET` | Cadena aleatoria para firmar la sesión |
 
-### Pasos
+Usa las credenciales del pooler (Supabase → **Connect** → **Transaction pooler**), no las del host directo `db.<proyecto>.supabase.co`: ese solo resuelve por IPv6 y Vercel no tiene salida IPv6.
 
-1. Clonar el repositorio:
+Para generar `SESSION_SECRET`:
 
-```bash
-git clone https://github.com/StephanieFortiz/Control_de_finanzas.git
-cd Finanzas
+```powershell
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-2. Crear y activar un entorno virtual:
+Se pueden agregar desde Vercel → proyecto → **Settings → Environment Variables**, o con la CLI desde `widget/`:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Linux/macOS
-.venv\Scripts\activate           # Windows
+```powershell
+vercel env add PGHOST production
 ```
 
-3. Instalar dependencias:
+## Desplegar
 
-```bash
-pip install -r requirements.txt
+Desde la carpeta `widget/`:
+
+```powershell
+npm i -g vercel   # solo la primera vez
+vercel --prod
 ```
 
-4. Configurar las credenciales de la base de datos en `.streamlit/secrets.toml`:
+Vercel no detecta solo los cambios en tu disco: hay que repetir `vercel --prod` después de cada cambio (a menos que se conecte el repo de Git al proyecto).
 
-```toml
-[supabase]
-url      = "https://<proyecto>.supabase.co"
-key      = "<anon-key>"
+## Base de datos nueva
 
-[postgres]
-host     = "db.<proyecto>.supabase.co"
-port     = 5432
-dbname   = "postgres"
-user     = "postgres"
-password = "<password>"
-```
-
-5. Iniciar la aplicación:
-
-```bash
-streamlit run app.py
-```
-
-La app crea las tablas automáticamente en el primer arranque.
-
-## Variables de entorno / Secretos
-
-El archivo `.streamlit/secrets.toml` **no se sube al repositorio**. Consulta el archivo `.gitignore` para ver qué archivos se excluyen.
+Para crear la base desde cero, abre el SQL Editor de Supabase y corre [`schema.sql`](schema.sql). Crea las tablas que falten y las categorías iniciales; es seguro correrlo más de una vez.
 
 ## Licencia
 
