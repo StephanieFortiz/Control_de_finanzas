@@ -83,7 +83,7 @@ function renderPendientes() {
   }
 
   $('lista-pendientes').innerHTML = lista.map(([p, dir]) => renderFilaPrestamo(p, uid, dir, true)).join('');
-  adjuntarListeners();
+  adjuntarListeners($('lista-pendientes'));
 }
 
 async function cargarArchivados() {
@@ -100,7 +100,7 @@ async function cargarArchivados() {
   $('lista-archivados').innerHTML = archivados
     .map((p) => renderFilaPrestamo(p, uid, p.deudor_id === uid ? 'debo' : 'me_deben', false))
     .join('');
-  adjuntarListeners();
+  adjuntarListeners($('lista-archivados'));
 }
 
 function renderFilaPrestamo(p, uid, direccion, puedeAbonar) {
@@ -142,14 +142,17 @@ function renderFilaPrestamo(p, uid, direccion, puedeAbonar) {
   `;
 }
 
-function adjuntarListeners() {
-  document.querySelectorAll('[data-detalle]').forEach((btn) => {
+// Solo dentro del contenedor recién renderizado: si se buscara en todo el documento,
+// los botones de la otra lista recibirían un segundo listener y el click abriría y
+// cerraría el formulario al mismo tiempo.
+function adjuntarListeners(contenedor) {
+  contenedor.querySelectorAll('[data-detalle]').forEach((btn) => {
     btn.addEventListener('click', () => toggleDetalle(Number(btn.dataset.detalle), btn));
   });
-  document.querySelectorAll('[data-eliminar]').forEach((btn) => {
+  contenedor.querySelectorAll('[data-eliminar]').forEach((btn) => {
     btn.addEventListener('click', () => eliminarPrestamo(Number(btn.dataset.eliminar)));
   });
-  document.querySelectorAll('[data-abonar]').forEach((btn) => {
+  contenedor.querySelectorAll('[data-abonar]').forEach((btn) => {
     btn.addEventListener('click', () => toggleAbono(Number(btn.dataset.abonar)));
   });
 }
